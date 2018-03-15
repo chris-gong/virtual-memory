@@ -190,9 +190,9 @@ void scheduler(int signum)
         return;
       }
       //L: free the thread control block and ucontext
-      free(prevThread->context->uc_stack.ss_sp);
-      free(prevThread->context);
-      free(prevThread);
+      mydeallocate(prevThread->context->uc_stack.ss_sp, __FILE__, __LINE__, NULL);
+      mydeallocate(prevThread->context, __FILE__, __LINE__, NULL);
+      mydeallocate(prevThread, __FILE__, __LINE__, NULL);
 
       currentThread->status = READY;
 
@@ -341,7 +341,7 @@ void garbage_collection()
   {
     list *removal = allThreads[key];
     allThreads[key] = allThreads[key]->next;
-    free(removal); 
+    mydeallocate(removal, __FILE__, __LINE__, NULL); 
   }
 
   else
@@ -353,7 +353,7 @@ void garbage_collection()
       {
 	list *removal = allThreads[key]->next;
 	allThreads[key]->next = removal->next;
-	free(removal);
+	mydeallocate(removal, __FILE__, __LINE__, NULL);
         break;
       }
       allThreads[key] = allThreads[key]->next;
@@ -374,7 +374,7 @@ void enqueue(list** q, tcb* insert)
 
   if(queue == NULL)
   {
-    queue = (list*)myallocate(sizeof(list), NULL);
+    queue = (list*)myallocate(sizeof(list), __FILE__, __LINE__, NULL);
     queue->thread = insert;
     queue->next = queue;
     *q = queue;
@@ -382,7 +382,7 @@ void enqueue(list** q, tcb* insert)
   }
 
   list *front = queue->next;
-  queue->next = (list*)myallocate(sizeof(list), NULL);
+  queue->next = (list*)myallocate(sizeof(list), __FILE__, __LINE__, NULL);
   queue->next->thread = insert;
   queue->next->next = front;
 
@@ -413,7 +413,7 @@ tcb* dequeue(list** q)
   {
     queue->next = front->next;
   }
-  free(front);
+  mydeallocate(front, __FILE__, __LINE__, NULL);
 
   
   if(tgt == NULL)
@@ -430,14 +430,14 @@ void l_insert(list** q, tcb* jThread) //Non-circular Linked List
 
   if(queue == NULL)
   {
-    queue = (list*)myallocate(sizeof(list), NULL);
+    queue = (list*)myallocate(sizeof(list),__FILE__, __LINE__, NULL);
     queue->thread = jThread;
     queue->next = NULL;
     *q = queue;
     return;
   }
 
-  list *newNode = (list*)myallocate(sizeof(list), NULL);
+  list *newNode = (list*)myallocate(sizeof(list), __FILE__, __LINE__, NULL);
   newNode->thread = jThread;
 
   //L: append to front of LL
@@ -461,7 +461,7 @@ tcb* l_remove(list** q)
   list *temp = queue;
   tcb *ret = queue->thread;
   queue = queue->next;
-  free(temp);
+  mydeallocate(temp, __FILE__, __LINE__, NULL);
   *q = queue;
   return ret;
 }
@@ -491,8 +491,8 @@ tcb* thread_search(my_pthread_t tid)
 
 void initializeMainContext()
 {
-  tcb *mainThread = (tcb*)myallocate(sizeof(tcb), NULL);
-  ucontext_t *mText = (ucontext_t*)myallocate(sizeof(ucontext_t), NULL);
+  tcb *mainThread = (tcb*)myallocate(sizeof(tcb), __FILE__, __LINE__, NULL);
+  ucontext_t *mText = (ucontext_t*)myallocate(sizeof(ucontext_t), __FILE__, __LINE__, NULL);
   getcontext(mText);
   mText->uc_link = &cleanup;
 
@@ -503,6 +503,14 @@ void initializeMainContext()
   mainThread->jVal = NULL;
   mainThread->retVal = NULL;
   mainThread->status = READY;
+
+  //memory manager initializations
+  mainThread->myPage = (myPage*)myallocate((sizeof(myPage), __FILE__, __LINE__, NULL);
+  mainThread->myPage->alloc = 0;
+  mainThread->myPage->offset = 0;
+  mainThread->myPage->pageTable = NULL;
+  mainThread->myPage->nextPage = NULL;
+  mainThread->myPage->prevPage = NULL;
 
   mainRetrieved = 1;
 
@@ -521,7 +529,7 @@ void initializeGarbageContext()
   //Initialize garbage collector
   getcontext(&cleanup);
   cleanup.uc_link = NULL;
-  cleanup.uc_stack.ss_sp = myallocate(STACK_S, NULL);
+  cleanup.uc_stack.ss_sp = myallocate(STACK_S, __FILE__, __LINE__, NULL);
   cleanup.uc_stack.ss_size = STACK_S;
   cleanup.uc_stack.ss_flags = 0;
   makecontext(&cleanup, (void*)&garbage_collection, 0);
@@ -543,15 +551,15 @@ int my_pthread_create(my_pthread_t * thread, pthread_attr_t * attr, void *(*func
   notFinished = 1;
 
   //L: Create a thread context to add to scheduler
-  ucontext_t* task = (ucontext_t*)myallocate(sizeof(ucontext_t), NULL);
+  ucontext_t* task = (ucontext_t*)myallocate(sizeof(ucontext_t), __FILE__, __LINE__, NULL);
   getcontext(task);
   task->uc_link = &cleanup;
-  task->uc_stack.ss_sp = myallocate(STACK_S, NULL);
+  task->uc_stack.ss_sp = myallocate(STACK_S, __FILE__, __LINE__, NULL);
   task->uc_stack.ss_size = STACK_S;
   task->uc_stack.ss_flags = 0;
   makecontext(task, (void*)function, 1, arg);
 
-  tcb *newThread = (tcb*)myallocate(sizeof(tcb), NULL);
+  tcb *newThread = (tcb*)myallocate(sizeof(tcb), __FILE__, __LINE__, NULL);
   newThread->context = task;
   newThread->tid = threadCount;
   newThread->priority = 0;
@@ -559,6 +567,15 @@ int my_pthread_create(my_pthread_t * thread, pthread_attr_t * attr, void *(*func
   newThread->jVal = NULL;
   newThread->retVal = NULL;
   newThread->status = READY;
+
+  //memory manager initializations
+  newThread->myPage = (myPage*)myallocate((sizeof(myPage), __FILE__, __LINE__, NULL);
+  newThread->myPage->alloc = 0;
+  newThread->myPage->offset = 0;
+  newThread->myPage->pageTable = NULL;
+  newThread->myPage->nextPage = NULL;
+  newThread->myPage->prevPage = NULL;
+
 
   *thread = threadCount;
   threadCount++;

@@ -38,17 +38,35 @@ typedef uint my_pthread_t;
 
 typedef struct sigaction mySig;
 
+//struct to map virtual to physical memory
+/*
+typedef struct pageTable
+{
+  void *phys;
+  void *virt;
+  struct pageTable *next;
+} pageTable;
+*/
+//struct to hold page allocation amount, lookup table
+typedef struct pageInfo
+{
+  unsigned char* pageTable;
+  size_t alloc;
+  size_t offset;
+  struct pageInfo *nextPage;
+  struct pageInfo *prevPage;
+} pageInfo;
+
 //L: struct to store thread attributes
 typedef struct threadControlBlock
 {
   my_pthread_t tid;
   unsigned int priority;
-
   //0 = ready to run, 1 = yielding, 2 = waiting, 3 = exiting, 4 = joining, 5 = waiting for mutex lock
   int status;
-  size_t alloc;
   void* jVal;
   void* retVal;
+  pageInfo *myPage;
   ucontext_t *context;
   struct list* joinQueue;
 } tcb;

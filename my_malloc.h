@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include "my_pthread_t.h"
 
 #define malloc(x) myallocate((x), __FILE__, __LINE__, currentThread)
