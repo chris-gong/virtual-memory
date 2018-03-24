@@ -1,0 +1,28 @@
+Reading/Writing Process:
+->finish malloc without caring about mprotect
+-?mprotect size of buffer
+->free on exit?
+->put checks in pthread.c for NULL returns
+->since all memory not already owned by running thread dis protected, calling malloc will result in segfault whenever new (unowned) frame is requested
+---->on first malloc, set metadata for frame being allocated
+->set counter starting from size of request, decrement by multiples of page size (requires global variable to get size of request to handler)
+->coalescing on free only changes block size to include space of other pages, but doesn't actually swap out and add new frames, increment by multiples of page size (requires global variable to send size of new block to deallocate method)
+->do we have to memalign disk?
+->In free, in the case of coalescing, we're gonna look for the next free block belonging to the same thread (pages belonging to other threads that are right next to the block being freed will be coalesced and attributed in the coalesced block size but not literally swapped out)
+->In malloc, using the above we can assume that blocks belonging to the current thread, in its block size will attribute for free memory belonging to the thread across multiple pages that do not belong to the current thread
+->Only swap on actual memory reads/writes (not mallocs/frees...but they can make pages on disk)
+->size_req_int and startAddr in diskSearch method should be global variables
+->fix pthread_join later, easy fix hopefully
+->make memory management stuff ATOMICCCCCCCCCCCCCCCCCCCCCCCCCCC!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+->fix all the starting points of physical memory for user threads (needs to be MEM_SIZE/2 + i * PAGE_SIZE, i is an index in frameMetaPhys)
+->in pthread_exit, if we have time, or garbage collection, relinquish thread ownership of frames because thread is about to be freed
+
+
+Request size is 6mb
+|[{-}----------------------][{-}------]|[{-}---------------------------------]|[{-}-----------------------------]|[{-}----------------------------]|-------------------------------|
+
+	    Frame1	    ^                Frame2						Frame 3				frame 4
+             Thread 1	   start point     Thread 2						Thread 3			thread 2
+
+Disk
+

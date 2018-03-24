@@ -43,10 +43,7 @@ typedef struct threadControlBlock
 {
   my_pthread_t tid;
   unsigned int priority;
-
-  //0 = ready to run, 1 = yielding, 2 = waiting, 3 = exiting, 4 = joining, 5 = waiting for mutex lock
-  int status;
-  size_t alloc;
+  int status;//0 = ready to run, 1 = yielding, 2 = waiting, 3 = exiting, 4 = joining, 5 = waiting for mutex lock
   void* jVal;
   void* retVal;
   ucontext_t *context;
