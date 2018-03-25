@@ -7,7 +7,6 @@
 // iLab Server: composite.cs.rutgers.edu
 
 #include "my_pthread_t.h"
-#include "my_malloc.h"
 
 #define STACK_S (8 * 1024) //8kB stack frames
 #define READY 0
@@ -49,7 +48,7 @@ static frameMeta frameMetaPhys[META_PHYS_S];//metadata for physical memory
 static frameMeta frameMetaSwap[META_SWAP_S];//metadata for swap file
 short pageFlag;//0 = no error, 1 = malloc-request, 2 free coalescing
 size_t request_size;//requested size from malloc
-char* startAddr;//on a malloc, address of a already allocated header, but we need to now actually make all its frame metas
+unsigned char* startAddr;//on a malloc, address of a already allocated header, but we need to now actually make all its frame metas
 FILE* swapfile;//disk space to hold page frames
 int isSet;//flag to initialize memory, disk, and metadata
 int swapFileFD;//Swap file file descriptor
@@ -69,12 +68,12 @@ int notFinished;
 //L: Signal handler to reschedule upon VIRTUAL ALARM signal
 void scheduler(int signum)
 {
+  printf("Checking Scheduler...\n");
   if(notFinished)
   {
-    //printf("caught in the handler! Get back!\n");
+    printf("caught in the handler! Get back!\n");
     return;
   }
-
 
   //Record remaining time
   getitimer(ITIMER_VIRTUAL, &currentTime);
@@ -93,12 +92,9 @@ void scheduler(int signum)
 
   if(signum != SIGVTALRM)
   {
-    /*TODO: PANIC*/
     //printf("[Thread %d] Signal Received: %d.\nExiting...\n", currentThread->tid, signum);
     exit(signum);
   }
-
-  //TODO: mprotect here (implement after porting malloc.c here)
 
 
   //L: Time elapsed = difference between max interval size and time remaining in timer
@@ -134,11 +130,11 @@ void scheduler(int signum)
   prevThread = currentThread;
   
   int i;
-
+  printf("right before switch case\n");
   switch(currentThread->status)
   {
     case READY: //READY signifies that the current thread is in the running queue
-
+      printf("ready\n");
       if(currentThread->priority < MAX_SIZE - 1)
       {
 	currentThread->priority++;
@@ -170,7 +166,7 @@ void scheduler(int signum)
       break;
    
     case YIELD: //YIELD signifies pthread yield was called; don't update priority
-
+      printf("yield\n");
       currentThread = NULL;
 
       for (i = 0; i < MAX_SIZE; i++) 
@@ -195,6 +191,7 @@ void scheduler(int signum)
       break;
 
     case WAIT:
+      printf("wait\n");
       //L: When would something go to waiting queue?
       //A: In the case of blocking I/O, how do we detect this? Sockets
       //L: GG NOT OUR PROBLEM ANYMORE
@@ -203,7 +200,7 @@ void scheduler(int signum)
       break;
 
     case EXIT:
-
+      printf("exit\n");
       currentThread = NULL;
 
       for (i = 0; i < MAX_SIZE; i++) 
@@ -224,10 +221,9 @@ void scheduler(int signum)
         return;
       }
       //L: free the thread control block and ucontext
-      mydeallocate(prevThread->context->uc_stack.ss_sp, __FILE__, __LINE__, NULL);
-      mydeallocate(prevThread->context, __FILE__, __LINE__, NULL);
-      mydeallocate(prevThread, __FILE__, __LINE__, NULL);
-
+      mydeallocate(prevThread->context->uc_stack.ss_sp, __FILE__, __LINE__, 0);
+      mydeallocate(prevThread->context, __FILE__, __LINE__, 0);
+      mydeallocate(prevThread, __FILE__, __LINE__, 0);
       currentThread->status = READY;
 
       //printf("Switching to: TID %d Priority %d\n", currentThread->tid, currentThread->priority);
@@ -248,7 +244,7 @@ void scheduler(int signum)
       break;
 
     case JOIN: //JOIN corresponds with a call to pthread_join
-
+      printf("join\n");
       currentThread = NULL;
       //notice how we don't enqueue the thread that just finished back into the running queue
       //we just go straight to getting another thread
@@ -270,7 +266,7 @@ void scheduler(int signum)
       break;
       
     case MUTEX_WAIT: //MUTEX_WAIT corresponds with a thread waiting for a mutex lock
-
+      
       //L: Don't add current to queue: already in mutex queue
       currentThread = NULL;
 
@@ -301,6 +297,7 @@ void scheduler(int signum)
 	
   currentThread->status = READY;
 
+
   //L: reset timer to 25ms times thread priority
   timer.it_value.tv_sec = 0;
   timer.it_value.tv_usec = INTERVAL * (currentThread->priority + 1) ;
@@ -321,8 +318,10 @@ void scheduler(int signum)
   else
   {
     pageFlag = CONTEXT_SWITCH;
+    printf("about to raise sigsegv\n");
     raise(SIGSEGV);
     pageFlag = CLEAR_FLAG;
+    //reprotect memory
     swapcontext(prevThread->context, currentThread->context);
   }
 
@@ -354,16 +353,32 @@ void maintenance()
 void garbage_collection()
 {
   //L: Block signal here
-
+  
   notFinished = 1;
-
-  currentThread->status = EXIT;
   
   //if we havent called pthread create yet
   if(!mainRetrieved)
   {
     exit(EXIT_SUCCESS);
   }
+
+  currentThread->status = EXIT;
+
+  int i;
+  for(i = 0; i < META_PHYS_S; i++)
+  {
+    if(frameMetaPhys[i].owner == currentThread->tid)
+    {
+      bzero(&PHYS_MEMORY[(frameMetaPhys[i].pageNum * PAGE_SIZE) + MEM_SECTION], PAGE_SIZE);
+      mprotect(&PHYS_MEMORY[(frameMetaPhys[i].pageNum * PAGE_SIZE) + MEM_SECTION], PAGE_SIZE, PROT_NONE);
+
+      frameMetaPhys[i].isFree = 1;
+      frameMetaPhys[i].owner = 0;
+      frameMetaPhys[i].pageNum = 0;
+    }
+
+  }
+
 
   tcb *jThread = NULL; //any threads waiting on the one being garbage collected
 
@@ -381,19 +396,19 @@ void garbage_collection()
   {
     list *removal = allThreads[key];
     allThreads[key] = allThreads[key]->next;
-    mydeallocate(removal, __FILE__, __LINE__, NULL); 
+    mydeallocate(removal, __FILE__, __LINE__, 0);
   }
 
   else
   {
     list *temp = allThreads[key];
-    while(allThreads[key]->next != NULL)
+    while(allThreads[key]->next != 0)
     {
       if(allThreads[key]->next->thread->tid == currentThread->tid)
       {
 	list *removal = allThreads[key]->next;
 	allThreads[key]->next = removal->next;
-	mydeallocate(removal, __FILE__, __LINE__, NULL);
+	mydeallocate(removal, __FILE__, __LINE__, 0);
         break;
       }
       allThreads[key] = allThreads[key]->next;
@@ -414,7 +429,11 @@ void enqueue(list** q, tcb* insert)
 
   if(queue == NULL)
   {
-    queue = (list*)myallocate(sizeof(list), __FILE__, __LINE__, NULL);
+    queue = (list*)myallocate(sizeof(list), __FILE__, __LINE__, 0);
+    if(queue == NULL)
+    {
+      return; //TODO:is this safe
+    }
     queue->thread = insert;
     queue->next = queue;
     *q = queue;
@@ -422,7 +441,11 @@ void enqueue(list** q, tcb* insert)
   }
 
   list *front = queue->next;
-  queue->next = (list*)myallocate(sizeof(list), __FILE__, __LINE__, NULL);
+  queue->next = (list*)myallocate(sizeof(list), __FILE__, __LINE__, 0);
+  if(queue->next == NULL)
+  {
+    return;
+  }
   queue->next->thread = insert;
   queue->next->next = front;
 
@@ -453,11 +476,12 @@ tcb* dequeue(list** q)
   {
     queue->next = front->next;
   }
-  mydeallocate(front, __FILE__, __LINE__, NULL);
+  mydeallocate(front, __FILE__, __LINE__, 0);
 
   
   if(tgt == NULL)
-  {printf("WE HAVE A PROBLEM IN DEQUEUE\n");}
+  {//printf("WE HAVE A PROBLEM IN DEQUEUE\n");
+  }
 
   *q = queue;
   return tgt;
@@ -467,17 +491,29 @@ tcb* dequeue(list** q)
 void l_insert(list** q, tcb* jThread) //Non-circular Linked List
 {
   list *queue = *q;
-
   if(queue == NULL)
   {
-    queue = (list*)myallocate(sizeof(list),__FILE__, __LINE__, NULL);
+    //printf("if queue is null in l_insert\n");
+    //printPhysicalMemory();
+    queue = (list*)myallocate(sizeof(list),__FILE__, __LINE__, 0);
+    //printPhysicalMemory();
+    //printf("finished allocating for list\n");
+    if(queue == NULL)
+    {
+      return;
+    }
     queue->thread = jThread;
     queue->next = NULL;
     *q = queue;
     return;
   }
+  //printf("after checking if queue is null in l_insert2\n");
+  list *newNode = (list*)myallocate(sizeof(list), __FILE__, __LINE__, 0);
+  if(newNode == NULL)
+  {
+    return;
+  }
 
-  list *newNode = (list*)myallocate(sizeof(list), __FILE__, __LINE__, NULL);
   newNode->thread = jThread;
 
   //L: append to front of LL
@@ -501,7 +537,7 @@ tcb* l_remove(list** q)
   list *temp = queue;
   tcb *ret = queue->thread;
   queue = queue->next;
-  mydeallocate(temp, __FILE__, __LINE__, NULL);
+  mydeallocate(temp, __FILE__, __LINE__, 0);
   *q = queue;
   return ret;
 }
@@ -531,11 +567,16 @@ tcb* thread_search(my_pthread_t tid)
 
 void initializeMainContext()
 {
-  tcb *mainThread = (tcb*)myallocate(sizeof(tcb), __FILE__, __LINE__, NULL);
-  ucontext_t *mText = (ucontext_t*)myallocate(sizeof(ucontext_t), __FILE__, __LINE__, NULL);
+  tcb *mainThread = (tcb*)myallocate(sizeof(tcb), __FILE__, __LINE__, 0);
+  ucontext_t *mText = (ucontext_t*)myallocate(sizeof(ucontext_t), __FILE__, __LINE__, 0);
+  if(mainThread == NULL || mText == NULL)
+  {
+    return;
+  }
+  //printf("Getting Context\n");
   getcontext(mText);
+  //printf("After get context\n");
   mText->uc_link = &cleanup;
-
   mainThread->context = mText;
   mainThread->tid = 0;
   mainThread->priority = 0;
@@ -543,9 +584,8 @@ void initializeMainContext()
   mainThread->jVal = NULL;
   mainThread->retVal = NULL;
   mainThread->status = READY;
-
+  
   mainRetrieved = 1;
-
   l_insert(&allThreads[0], mainThread);
 
   currentThread = mainThread;
@@ -553,6 +593,7 @@ void initializeMainContext()
 
 void initializeGarbageContext()
 {
+
   memset(&sig,0,sizeof(mySig));
   sig.sa_handler = &scheduler;
   sigaction(SIGVTALRM, &sig,NULL);
@@ -561,36 +602,60 @@ void initializeGarbageContext()
   //Initialize garbage collector
   getcontext(&cleanup);
   cleanup.uc_link = NULL;
-  cleanup.uc_stack.ss_sp = myallocate(STACK_S, __FILE__, __LINE__, NULL);
+  cleanup.uc_stack.ss_sp = myallocate(STACK_S, __FILE__, __LINE__, 0);
+  if(cleanup.uc_stack.ss_sp == NULL)
+  {
+    return;
+  }
   cleanup.uc_stack.ss_size = STACK_S;
   cleanup.uc_stack.ss_flags = 0;
   makecontext(&cleanup, (void*)&garbage_collection, 0);
 
   //L: set thread count
   threadCount = 1;
+  printf("Garbage Finished~~\n");
 }
 
 /* create a new thread */
 int my_pthread_create(my_pthread_t * thread, pthread_attr_t * attr, void *(*function)(void*), void * arg)
 {
-
+  printf("thread created\n");
+  int justRetrieved = 0;
   if(!mainRetrieved)
   {
+    printf("Garbage---\n");
     initializeGarbageContext();
+    justRetrieved = 1;
   }
 
   notFinished = 1;
+  
 
   //L: Create a thread context to add to scheduler
-  ucontext_t* task = (ucontext_t*)myallocate(250sizeof(ucontext_t), __FILE__, __LINE__, NULL);
+  ucontext_t* task = (ucontext_t*)myallocate(sizeof(ucontext_t), __FILE__, __LINE__, 0);
+  if(task == NULL)
+  {
+    return -1;
+  }
   getcontext(task);
+  //printf("finished getting context in pthread_create\n");
   task->uc_link = &cleanup;
-  task->uc_stack.ss_sp = myallocate(STACK_S, __FILE__, __LINE__, NULL);
+  //printPhysicalMemory();
+  task->uc_stack.ss_sp = myallocate(STACK_S, __FILE__, __LINE__, 0);
+  //printf("finished allocating stack in pthread_create\n");
+  if(task->uc_stack.ss_sp == NULL)
+  {
+    return -1;
+  }
   task->uc_stack.ss_size = STACK_S;
   task->uc_stack.ss_flags = 0;
   makecontext(task, (void*)function, 1, arg);
 
-  tcb *newThread = (tcb*)myallocate(sizeof(tcb), __FILE__, __LINE__, NULL);
+  tcb *newThread = (tcb*)myallocate(sizeof(tcb), __FILE__, __LINE__, 0);
+  if(newThread == NULL)
+  {
+    return -1;
+  }
   newThread->context = task;
   newThread->tid = threadCount;
   newThread->priority = 0;
@@ -610,14 +675,13 @@ int my_pthread_create(my_pthread_t * thread, pthread_attr_t * attr, void *(*func
 
   //L: store main context
 
-  if (!mainRetrieved)
+  if (justRetrieved)
   {
-    initializeMainContext();
-
+    //initializeMainContext();
+    printf("Raise?\n");
     raise(SIGVTALRM);
   }
   //printf("New thread created: TID %d\n", newThread->tid);
-  
   
   return 0;
 };
@@ -625,6 +689,8 @@ int my_pthread_create(my_pthread_t * thread, pthread_attr_t * attr, void *(*func
 /* give CPU pocession to other user level threads voluntarily */
 int my_pthread_yield()
 {
+  notFinished = 1;
+
   if(!mainRetrieved)
   {
     initializeGarbageContext();
@@ -632,12 +698,17 @@ int my_pthread_yield()
   }
   //L: return to signal handler/scheduler
   currentThread->status = YIELD;
+
+  notFinished = 0;
   return raise(SIGVTALRM);
-};
+}
 
 /* terminate a thread */
 void my_pthread_exit(void *value_ptr)
 {
+  notFinished = 1;
+
+  //printf("In pthread_exit, mainRetrieved is %i\n", mainRetrieved);
   if(!mainRetrieved)
   {
     initializeGarbageContext();
@@ -645,26 +716,31 @@ void my_pthread_exit(void *value_ptr)
   }
   //L: call garbage collection
   currentThread->jVal = value_ptr;
-  setcontext(&cleanup);
+
+  setcontext(&cleanup);//notFinished is reset in garbage collection
 };
 
 /* wait for thread termination */
 int my_pthread_join(my_pthread_t thread, void **value_ptr)
 {
+  notFinished = 1;
   if(!mainRetrieved)
   {
     initializeGarbageContext();
     initializeMainContext();
   }
-  notFinished = 1;
   //L: make sure thread can't wait on self
   if(thread == currentThread->tid)
-  {return -1;}
+  {
+    notFinished = 0;
+    return -1;
+  }
 
   tcb *tgt = thread_search(thread);
   
   if(tgt == NULL)
   {
+    notFinished = 0;
     return -1;
   }
   
@@ -677,12 +753,17 @@ int my_pthread_join(my_pthread_t thread, void **value_ptr)
 
   notFinished = 0;
   raise(SIGVTALRM);
+  notFinished = 1;
+
 
   if(value_ptr == NULL)
-  {return 0;}
+  {
+    notFinished = 0;
+    return 0;
+  }
 
   *value_ptr = currentThread->retVal;
-
+  notFinished = 0;
   return 0;
 };
 
@@ -705,16 +786,20 @@ int my_pthread_mutex_init(my_pthread_mutex_t *mutex, const pthread_mutexattr_t *
 /* aquire the mutex lock */
 int my_pthread_mutex_lock(my_pthread_mutex_t *mutex)
 {
+  notFinished = 1;
+
   if(!mainRetrieved)
   {
     initializeGarbageContext();
     initializeMainContext();
   }
-  notFinished = 1;
 
   //FOR NOW ASSUME MUTEX WAS INITIALIZED
   if(!mutex->available)
-  {return -1;}
+  {
+    notFinished = 0;
+    return -1;
+  }
 
   while(__atomic_test_and_set((volatile void *)&mutex->locked,__ATOMIC_RELAXED))
   {
@@ -728,10 +813,12 @@ int my_pthread_mutex_lock(my_pthread_mutex_t *mutex)
     notFinished = 0;
     raise(SIGVTALRM);
   }
+  notFinished = 1;
 
   if(!mutex->available)
   {
     mutex->locked = 0;
+    notFinished = 0;
     return -1;
   }
 
@@ -746,6 +833,8 @@ int my_pthread_mutex_lock(my_pthread_mutex_t *mutex)
 /* release the mutex lock */
 int my_pthread_mutex_unlock(my_pthread_mutex_t *mutex)
 {
+  notFinished = 1;
+
   if(!mainRetrieved)
   {
     initializeGarbageContext();
@@ -753,12 +842,14 @@ int my_pthread_mutex_unlock(my_pthread_mutex_t *mutex)
   }
   //NOTE: handle errors: unlocking an open mutex, unlocking mutex not owned by calling thread, or accessing unitialized mutex
 
-  notFinished = 1;
 
   //ASSUMING mutex->available will be initialized to 0 by default without calling init
   //available in this case means that mutex has been initialized or destroyed (state variable)
   if(!mutex->available || !mutex->locked || mutex->holder != currentThread->tid)
-  {return -1;}
+  {
+    notFinished = 0;
+    return -1;
+  }
 
   mutex->locked = 0;
   mutex->holder = -1;
@@ -773,7 +864,6 @@ int my_pthread_mutex_unlock(my_pthread_mutex_t *mutex)
   }
 
   notFinished = 0;
-
   return 0;
 };
 
@@ -788,7 +878,12 @@ int my_pthread_mutex_destroy(my_pthread_mutex_t *mutex)
 
   //L: if mutex still locked, wait for thread to release lock
   while(m.locked)
-  {raise(SIGVTALRM);}
+  {
+    raise(SIGVTALRM);
+  }
+
+  notFinished = 1;
+
 
   tcb *muThread;
   while(m.queue != NULL)
@@ -798,6 +893,7 @@ int my_pthread_mutex_destroy(my_pthread_mutex_t *mutex)
   }
 
   *mutex = m;
+  notFinished = 0;
   return 0;
 };
 
@@ -823,157 +919,117 @@ void initializeQueues(list** runQ)
 
 static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
 {
-
-  char *src_page = (char *)si->si_addr;
-  int src_offset = src_page - &PHYS_MEM[MEM_SIZE/2];
-  int src_pageNum = src_offset/PAGE_SIZE;
-  /*if(firstPage == -1)
+  notFinished = 1;
+  unsigned char *src_page = (unsigned char *)si->si_addr;
+  //printf("si_addr is %p\n", si->si_addr);
+  int src_offset = src_page - &PHYS_MEMORY[MEM_SECTION];
+  int src_pageNum = (src_offset/PAGE_SIZE) + MEM_SECTION;//index in PHYS_MEMORY in page
+  //printf("We are in the memory manager src_offset: %i\n", src_offset);
+  if(pageFlag == CLEAR_FLAG) //thread/user or library/OS accessing invalid memory
   {
-    uintptr_t startFrame = (uintptr_t)&PHYS_MEMORY[MEM_SIZE/2];
-    firstPage = (startFrame >> 12) & 0xfffff;
-  }*/
-
-  //pageNum -= firstPage; //how many pages away from the first page in user memory
-
-  if(pageFlag == 0) //thread/user or library/OS accessing invalid memory
-  {
-    printf("->Segmentation Fault");
-    exit(EXIT_FAILURE);
+    //printf("->Segmentation Fault\n");
+    pthread_exit(NULL);
   }
-
-  if(pageFlag == CREATE_PAGE) //first time we call malloc for any thread
+  else if(pageFlag == CREATE_PAGE) //first time we call malloc for any thread, SHOULD ONLY CREATE ONE, THE FIRST MOTHA F'ING PAGE
   {
-    mprotect(PHYS_MEMORY, MEM_SIZE, PROT_READ | PROT_WRITE);
+    //printf("Creating first page...\n");
     //check if page we are on is not owned by any thread at all (may need to swap out)
     //requires creating new pages
-    char freeBit = frameMetaPhys[src_pageNum].isFree;
-    int tid = frameMetaPhys[src_pageNum].owner;
-    //find number of pages needed for allocation
-    int num_of_pages_req = ceil((double)(request_size+(sizeof(char)*3))/ PAGE_SIZE);
     //look to see if there's enough room on physical and disk to fit new pages requested
-    int i;
     //insert frame metas either in physical or disk for the malloc request
     //check physical memory first
     //assuming for the first malloc in a thread
-    for(i = 0; i < META_PHYS_S && num_of_pages_req > 0; i++)
+    if(frameMetaPhys[0].isFree)
     {
-      if(frameMetaPhys[i].isFree)
+      //if this page isn't owned by any thread
+      frameMetaPhys[0].isFree = 0; 
+      frameMetaPhys[0].owner = currentThread->tid;
+      frameMetaPhys[0].pageNum = 0;
+      //swapMe(0,i,i); //swap the meta we just inserted into the right spot
+    }
+    else if(frameMetaPhys[0].owner != currentThread->tid)
+    {
+      //if this page is owned by another thread, need to swap it out after inserting page to somewhere in physical mem or swap file
+      //first find open page in physical or swap file
+      int j;
+      int foundInPhys = 0;
+      int foundInDisk = 0;
+      //check phys
+      for(j = 1; j < META_PHYS_S; j++)
       {
-        //if this page isn't owned by any thread
-        frameMetaPhys[i].isFree = 0; 
-        frameMetaPhys[i].owner = currentThread->tid;
-        frameMetaPhys[i].pageNum = i;
-        swapMe(i, 0); //swap the meta we just inserted into the right spot
-        num_of_pages_req--;
-      }
-      else if(frameMetaPhys[i].owner != currentThread->tid)
-      {
-        //if this page is owned by another thread, need to swap it out after inserting page to somewhere in physical mem or swap file
-        //first find open page in physical or swap file
-        int j;
-        int foundInPhys = 0;
-        int foundInDisk = 0;
-        //check phys
-        for(j = i + 1; j < META_PHYS_S; j++)
+        if(frameMetaPhys[j].isFree)
         {
-          if(frameMetaPhys[j].isFree)
+          frameMetaPhys[j].isFree = 0;
+          frameMetaPhys[j].owner = currentThread->tid;
+          frameMetaPhys[j].pageNum = 0;
+          swapMe(0,0,j); //swap the meta we just inserted into the right spot
+          foundInPhys = 1;
+          break;
+        }
+      }
+      //check disk
+      if(!foundInPhys)
+      {
+        for(j = 0; j < META_SWAP_S; j++)
+        {
+          if(frameMetaSwap[j].isFree)
           {
-            frameMetaPhys[j].isFree = 0;
-            frameMetaPhys[j].owner = currentThread->tid;
-            frameMetaPhys[j].pageNum = i;
-            swapMe(i, 0); //swap the meta we just inserted into the right spot
-            num_of_pages_req--;
-            foundInPhys = 1;
+            frameMetaSwap[j].isFree = 0;
+            frameMetaSwap[j].owner = currentThread->tid;
+            frameMetaSwap[j].pageNum = 0;
+            swapMe(1,0,j); //swap the meta we just inserted into the right spot
+            foundInDisk = 1;
             break;
           }
         }
-        //check disk
-        if(!foundInPhys)
+        if(!foundInDisk)
         {
-          for(j = 0; j < META_SWAP_S; j++)
-          {
-            if(frameMetaSwap[j].isFree)
-            {
-              frameMetaSwap[j].isFree = 0;
-              frameMetaSwap[j].owner = currentThread->tid;
-              frameMetaSwap[j].pageNum = i;
-              swapMe(i, 1); //swap the meta we just inserted into the right spot
-              num_of_pages_req--;
-              foundInDisk = 1;
-              break;
-            }
-          }
-          if(!foundInDisk)
-          {
-            printf("Ran out of memory in both physical and disk\n");
-            exit(-1);
-          }
+          //printf("Ran out of memory in both physical and disk\n");
+          startAddr = NULL;
+          notFinished = 0;
+          return;
         }
       }
     }
-    mprotect(PHYS_MEMORY, MEM_SIZE, PROT_NONE);
-    for(i = 0; i < META_PHYS_S; i++)
-    {
-      //unprotect pages belonging to the current thread we are context siwtching to
-      if(frameMetaPhys[i].owner == currentThread->tid)
-      {
-        mprotect(&PHYS_MEMORY[MEM_SIZE/2 + (i * PAGE_SIZE)], PAGE_SIZE, PROT_READ | PROT_WRITE);
-      }
-    }
+    printf("Address: %p\n",&PHYS_MEMORY[MEM_SECTION]);
+    mprotect(&PHYS_MEMORY[MEM_SECTION], PAGE_SIZE, PROT_READ | PROT_WRITE);
+    printf("Yo mama has babies again\n");
   }
-
-  if(pageFlag == EXTEND_PAGES) //free block within a page owned by a thread in physical mem found
+  else if(pageFlag == EXTEND_PAGES) //a free block within a page owned by a thread in physical mem found [this is First Fit]
   {
-    mprotect(PHYS_MEMORY, MEM_SIZE, PROT_READ | PROT_WRITE);
     //need to create frame meta entries to fit size of request
-    //TODO: find offset from current page
 
-    src_page = startAddr;
-    src_offset = src_page - &PHYS_MEM[MEM_SIZE/2];
-    src_pageNum = src_offset/PAGE_SIZE;
+    //src_page = startAddr;
+
+    //start- variables refer to the address to the left that will be extended
+    //src_page = segfault-triggerer
+    int start_offset = startAddr - &PHYS_MEMORY[MEM_SECTION];
+    int start_pageNum = MEM_SECTION + (start_offset/PAGE_SIZE);
     int headerSize = sizeof(char) * 3;
-    //check if header is split among two pages
     int next_pageNum = src_pageNum + 1;
-    int num_of_pages_to_free = 0;
-    int difference = 0;
-    if(next_pageNum < META_PHYS_S && src_page + headerSize + blockToFreeSize <= &PHYS_MEM[next_pageNum * PAGE_SIZE])
+    unsigned int endOfPhys = META_PHYS_S + MEM_SECTION;
+    int right_pageNum = 0;
+    int left_pageNum = start_pageNum + 1; //these are the bounds for where we're gonna create pages
+    //check if header is split among two pages
+    if(next_pageNum < endOfPhys && src_page + headerSize <= &PHYS_MEMORY[next_pageNum * PAGE_SIZE])
     {
-      //dont need to free any frames because the block to free is contained within one page
-      printf("ayyyyyyyyyyyyyyyyyyyy\n");
-      
+      right_pageNum = src_pageNum;
     }
-    else{
-      if(next_pageNum < META_PHYS_S && (startAddr + (sizeof(char) * 3)) > &PHYS_MEM[next_pageNum * PAGE_SIZE])
-      {
-        next_pageNum += 1;
-        //header is split between two frames
-        if(next_pageNum < META_PHYS_S && src_page + headerSize + blockToFreeSize <= &PHYS_MEM[next_pageNum * PAGE_SIZE])
-        {
-          //dont need to free any frames because the block to free is contained within one page
-          printf("ayyyyyyyyyyyyyyyyyyyy\n");
-      
-        }
-        else
-        {
-          //block not contained within one frame
-          //find the difference between the address of the beginning of the next page and the address of the next header block
-          difference = (src_page + (sizeof(char) * 3) + blockToFreeSize) - &PHYS_MEM[next_pageNum * PAGE_SIZE]
-        }
-      }
-      else if(next_pageNum < META_PHYS_S)
-      {
-        //header is not split between two frames
-        //find the difference between the address of the beginning of the next page and the address of the next header block
-        difference = (src_page + (sizeof(char) * 3) + blockToFreeSize) - &PHYS_MEM[next_pageNum * PAGE_SIZE]     
-      }
-      num_of_pages_to_malloc = ceil((double)(difference)/ PAGE_SIZE);
+    else if(next_pageNum < endOfPhys)
+    {
+      right_pageNum = src_pageNum;
+    }
+    else
+    {
+      right_pageNum = next_pageNum;
     }
     //look to see if there's enough room on physical and disk to fit new pages needed for request
     int i;
     //insert frame metas either in physical or disk for the malloc request
     //check physical memory first
-    //assuming for the first malloc in a thread
-    for(i = next_pageNum; i < META_PHYS_S && num_of_pages_req > 0; i++)
+    int leftFrameIndex = left_pageNum - MEM_SECTION;
+    int rightFrameIndex = right_pageNum - MEM_SECTION;
+    for(i = leftFrameIndex; i <= rightFrameIndex; i++)
     {
       if(frameMetaPhys[i].isFree)
       {
@@ -981,8 +1037,8 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
         frameMetaPhys[i].isFree = 0; 
         frameMetaPhys[i].owner = currentThread->tid;
         frameMetaPhys[i].pageNum = i;
-        swapMe(i, 0); //swap the meta we just inserted into the right spot
-        num_of_pages_req--;
+        //swapMe(i, 0); //swap the meta we just inserted into the right spot
+        mprotect(&PHYS_MEMORY[(i * PAGE_SIZE) + MEM_SECTION], PAGE_SIZE, PROT_READ | PROT_WRITE);
       }
       else if(frameMetaPhys[i].owner != currentThread->tid)
       {
@@ -999,8 +1055,7 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
             frameMetaPhys[j].isFree = 0;
             frameMetaPhys[j].owner = currentThread->tid;
             frameMetaPhys[j].pageNum = i;
-            swapMe(i, 0); //swap the meta we just inserted into the right spot
-            num_of_pages_req--;
+            swapMe(0, i, j); //swap the meta we just inserted into the right spot
             foundInPhys = 1;
             break;
           }
@@ -1015,160 +1070,151 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
               frameMetaSwap[j].isFree = 0;
               frameMetaSwap[j].owner = currentThread->tid;
               frameMetaSwap[j].pageNum = i;
-              swapMe(i, 1); //swap the meta we just inserted into the right spot
-              num_of_pages_req--;
+              swapMe(1, i, j); //swap the meta we just inserted into the right spot
               foundInDisk = 1;
               break;
             }
           }
           if(!foundInDisk)
           {
-            printf("Ran out of memory in both physical and disk\n");
-            exit(-1);
+            //printf("Ran out of memory in both physical and disk\n");
+            startAddr = NULL;
+	    notFinished = 0;
+            return;
           }
         }
       }
     }
-    
-    mprotect(PHYS_MEMORY, MEM_SIZE, PROT_NONE);
-    for(i = 0; i < META_PHYS_S; i++)
-    {
-      //unprotect pages belonging to the current thread we are context siwtching to
-      if(frameMetaPhys[i].owner == currentThread->tid)
-      {
-        mprotect(&PHYS_MEMORY[MEM_SIZE/2 + (i * PAGE_SIZE)], PAGE_SIZE, PROT_READ | PROT_WRITE);
-      }
-    }
   }
-  if(pageFlag == CONTEXT_SWITCH)
+  else if(pageFlag == CONTEXT_SWITCH)
   {
-    mprotect(PHYS_MEMORY, MEM_SIZE, PROT_READ | PROT_WRITE);
+    //printf("we're context switching by swapping pages bitchessssssssss\n");
     //find all pages that belong to current thread in physical memory
     int i;
     for(i = 0; i < META_PHYS_S; i++)
     {
-      if(frameMetaPhys[i].owner == currentThread->tid)
+      if(frameMetaPhys[i].owner == currentThread->tid && !frameMetaPhys[i].isFree)
       {
-        swapMe(i, 0);
+        if (i == frameMetaPhys[i].pageNum)
+        {
+	  printf("THis is a print statement\n");
+          mprotect(&PHYS_MEMORY[MEM_SECTION + (i * PAGE_SIZE)], PAGE_SIZE, PROT_READ | PROT_WRITE);
+	}
+	else
+	{
+	  printf("Swap\n");
+          swapMe(0,frameMetaPhys[i].pageNum,i);
+	}
       }
     }
-    //find all pages that belong to current thread in disk
+    //find all pages that belong to current thread on swap file
     for(i = 0; i < META_SWAP_S; i++)
     {
       if(frameMetaSwap[i].owner == currentThread->tid)
       {
-        swapMe(i, 1);
-      }
-    }
-    mprotect(PHYS_MEMORY, MEM_SIZE, PROT_NONE);
-    for(i = 0; i < META_PHYS_S; i++)
-    {
-      //unprotect pages belonging to the current thread we are context siwtching to
-      if(frameMetaPhys[i].owner == currentThread->tid)
-      {
-        mprotect(&PHYS_MEMORY[MEM_SIZE/2 + (i * PAGE_SIZE)], PAGE_SIZE, PROT_READ | PROT_WRITE);
+	printf("Swap\n");
+        swapMe(1,frameMetaPhys[i].pageNum,i);
       }
     }
   }
-  
-  if(pageFlag == FREE_FRAMES)
+  else if(pageFlag == FREE_FRAMES)
   {
-    mprotect(PHYS_MEMORY, MEM_SIZE, PROT_READ | PROT_WRITE);
-
     src_page = startAddr;
-    src_offset = src_page - &PHYS_MEM[MEM_SIZE/2];
+    src_offset = src_page - &PHYS_MEMORY[MEM_SECTION];
     src_pageNum = src_offset/PAGE_SIZE;
     int headerSize = sizeof(char) * 3;
-    //check if header is split among two pages
+
     int next_pageNum = src_pageNum + 1;
-    int num_of_pages_to_free = 0;
-    int difference = 0;
-    if(next_pageNum < META_PHYS_S && src_page + headerSize + blockToFreeSize <= &PHYS_MEM[next_pageNum * PAGE_SIZE])
+    unsigned int endOfPhys = META_PHYS_S + MEM_SECTION;
+    int leftPageNum = 0;
+    int rightPageNum = 0;
+    //check if header is split among two pages
+    if(next_pageNum < endOfPhys && src_page + headerSize <= &PHYS_MEMORY[next_pageNum * PAGE_SIZE])
     {
-      //dont need to free any frames because the block to free is contained within one page
-      printf("ayyyyyyyyyyyyyyyyyyyy\n");
-      
+      leftPageNum = src_pageNum;
+    }
+    else if(next_pageNum < endOfPhys)
+    {
+      leftPageNum = src_pageNum;
     }
     else{
-      if(next_pageNum < META_PHYS_S && (startAddr + (sizeof(char) * 3)) > &PHYS_MEM[next_pageNum * PAGE_SIZE])
+      leftPageNum = next_pageNum;
+    }
+    //have to calculate right page num
+    unsigned char *end_addr = src_page + (sizeof(char) * 3) + blockToFreeSize;
+    int end_offset = end_addr - &PHYS_MEMORY[MEM_SECTION];
+    rightPageNum = end_offset/PAGE_SIZE;
+    if(rightPageNum % PAGE_SIZE == 0 && rightPageNum != 0)
+    {
+      rightPageNum--;
+    }
+    int i;
+    for(i = leftPageNum + 1; i <= rightPageNum; i++)
+    {
+      //unclaiming pages in physical memory if they are owned by current thread
+      if(!frameMetaPhys[i].isFree && frameMetaPhys[i].owner == currentThread->tid)
       {
-        next_pageNum += 1;
-        //header is split between two frames
-        if(next_pageNum < META_PHYS_S && src_page + headerSize + blockToFreeSize <= &PHYS_MEM[next_pageNum * PAGE_SIZE])
-        {
-          //dont need to free any frames because the block to free is contained within one page
-          printf("ayyyyyyyyyyyyyyyyyyyy\n");
-      
-        }
-        else
-        {
-          //block not contained within one frame
-          //find the difference between the address of the beginning of the next page and the address of the next header block
-          difference = (src_page + (sizeof(char) * 3) + blockToFreeSize) - &PHYS_MEM[next_pageNum * PAGE_SIZE]
-        }
-      }
-      else if(next_pageNum < META_PHYS_S)
-      {
-        //header is not split between two frames
-        //find the difference between the address of the beginning of the next page and the address of the next header block
-        difference = (src_page + (sizeof(char) * 3) + blockToFreeSize) - &PHYS_MEM[next_pageNum * PAGE_SIZE]     
-      }
-      num_of_pages_to_free = floor((double)(difference)/ PAGE_SIZE);
-      //free pages' frame meta
-      int i;
-      for(i = next_pageNum; i < next_pageNum + 1 + num_of_pages_to_free; i++)
-      {
-        frameMetaPhys[i].isFree = 1;
+        frameMetaPhys[i].isFree = 1; 
         frameMetaPhys[i].owner = 0;
         frameMetaPhys[i].pageNum = 0;
-      }
-    }
-    
-    mprotect(PHYS_MEMORY, MEM_SIZE, PROT_NONE);
-    for(i = 0; i < META_PHYS_S; i++)
-    {
-      //unprotect pages belonging to the current thread we are context siwtching to
-      if(frameMetaPhys[i].owner == currentThread->tid)
-      {
-        mprotect(&PHYS_MEMORY[MEM_SIZE/2 + (i * PAGE_SIZE)], PAGE_SIZE, PROT_READ | PROT_WRITE);
+        mprotect(&PHYS_MEMORY[(i * PAGE_SIZE) + MEM_SECTION], PAGE_SIZE, PROT_NONE);
       }
     }
   }
-
-
-
+  printf("PHYS_MEMORY: %p\tMEM_SECTION: %d\n",(void*)PHYS_MEMORY,MEM_SECTION);
+  printf("daddy\n");
+  printf("??????\n");
+  notFinished = 0;
 }
 
 void setMem()
 {
+
   //initialize physical memory
   PHYS_MEMORY = (unsigned char*)memalign(PAGE_SIZE, MEM_SIZE);
+  //posix_memalign((void**)&PHYS_MEMORY, PAGE_SIZE, MEM_SIZE);
   bzero(PHYS_MEMORY, MEM_SIZE);
 
-  firstPage=-1;
+  //printf("Memalign working?\n");
+
 
   //set up two blocks of size 4 MB, first half is user memory, second half is OS/library memory
-  //create blocks of size MEM_SIZE/2
+  //create blocks of size MEM_SECTION [MEM_SIZE/2]
   unsigned char freeBit = 0x80;
-  int totalSize = (MEM_SIZE/2) - 3; //-3 because headers are 3 bytes
-  int pIndex = MEM_SIZE/2;
+  int totalSize = (MEM_SECTION) - 3; //-3 because headers are 3 bytes
+  int pIndex = MEM_SECTION;
 
   //Allocation metadata: leftmost bit for free bit, 23 bits for allocation size
   //first the OS memory
   PHYS_MEMORY[0] = freeBit | ((totalSize >> 16) & 0x7f);
   PHYS_MEMORY[1] = (totalSize >> 8) & 0xff;
   PHYS_MEMORY[2] = totalSize & 0xff;
-
   //second the user memory
   PHYS_MEMORY[pIndex] = freeBit | ((totalSize >> 16) & 0x7f);
   PHYS_MEMORY[pIndex+1] = (totalSize >> 8) & 0xff;
   PHYS_MEMORY[pIndex+2] = totalSize & 0xff;    
 
+  //Initialize MetaPhys
+  int i = 0;
+  for(i=0; i < META_PHYS_S; i++)
+  {
+    frameMetaPhys[i].isFree = 1; 
+    frameMetaPhys[i].owner = 0;
+    frameMetaPhys[i].pageNum = 0;
+  }
+
+  //Initialize MetaSwap
+  for(i=0; i < META_SWAP_S; i++)
+  {
+    frameMetaSwap[i].isFree = 1; 
+    frameMetaSwap[i].owner = 0;
+    frameMetaSwap[i].pageNum = 0;
+  }
+
   //initialize swap file
-  initializeDisk();
-    
+  initializeSwapFile();
+  isSet = 1;
   //protect entire memory
-  mprotect(PHYS_MEMORY, MEM_SIZE, PROT_NONE);
 
 
   //set up signal handler
@@ -1179,26 +1225,26 @@ void setMem()
 
   if(sigaction(SIGSEGV, &sa, NULL) == -1)
   {
-    printf("Fatal error setting up signal handler\n");
+    //printf("Fatal error setting up signal handler\n");
     exit(EXIT_FAILURE);    //explode!
   }
 
   if(!mainRetrieved)
   {
+    //printf("-->Main Initializing...\n");
     initializeMainContext();
+    //printf("Main Initialized-->\n");
   }
 
-  isSet = 1;
-
+  
 }
 
-
-
 /*Creates the 16 MB Swap File*/
-void initializeDisk()
+void initializeSwapFile()
 {
+  //printf("Swapper\n");
   char *swapper = "swapFile";
-  swapFileFD = open(swapper,O_CREAT | O_RDWR | O_TRUNIC, S_IRUSR | S_IWUSR);
+  swapFileFD = open(swapper,O_CREAT | O_RDWR | O_TRUNC, S_IRUSR | S_IWUSR);
   lseek(swapFileFD,0,SEEK_SET);
   static unsigned char swapFileBuffer[PAGE_SIZE * PAGE_SIZE];
   bzero(swapFileBuffer,PAGE_SIZE*PAGE_SIZE);
@@ -1208,76 +1254,73 @@ void initializeDisk()
 
 
 /*Swaps frames out for one another, exact frames depend upon the context*/
-void swapMe(int pageLocation, int startOnDisk)
+//newPos = place where it's being swapped into, oldPos = location where it was before; both relative to what we were previously searching for
+void swapMe(int isOnDisk, int newPos, int oldPos)
 {
-  //Searching for frame in PHYS_MEMORY
-  int i = 0;
-  if(!startOnDisk){
-    for(i=0; i < META_PHYS_S; i++)
-    {
-      if(frameMetaPhys[i].owner == currentThread->tid && frameMetaPhys[i].pageNum == pageLocation) //find page of current thread in physical memory
-      {
-        //unprotect memory of physical memory at PAGE_SIZE * pageLocation
-        mprotect(PHYS_MEMORY[pageLocation*PAGE_SIZE], PAGE_SIZE, PROT_READ | PROT_WRITE);
-        char buffer1[PAGE_SIZE];
-        char buffer2[PAGE_SIZE];
-        //swap out contents of physical memory
-        memcpy(buffer1,PHYS_MEMORY[pageLocation*PAGE_SIZE],PAGE_SIZE); //what's being swapped out
-        memcpy(buffer2,PHYS_MEMORY[i*PAGE_SIZE],PAGE_SIZE); //what's being swapped in
-        memcpy(PHYS_MEMORY[pageLocation*PAGE_SIZE],buffer2,PAGE_SIZE);
-        memcpy(PHYS_MEMORY[i*PAGE_SIZE],buffer1,PAGE_SIZE);
-        //swap out contents of meta data?
-        frameMeta fm1;
-        frameMeta fm2;
-        memcpy(&fm1, frameMetaPhys[pageLocation], sizeof(fm1));
-        memcpy(&fm2, frameMetaPhys[i], sizeof(fm2));
-        memcpy(frameMetaPhys[pageLocation], &fm2, sizeof(fm1));
-        memcpy(frameMetaPhys[i], &fm1, sizeof(fm2));
-        return;
-      }
-    }
+  //Grabbing frame in PHYS_MEMORY
+
+  if (!isOnDisk)
+  {
+    mprotect(&PHYS_MEMORY[(newPos*PAGE_SIZE) + MEM_SECTION], PAGE_SIZE, PROT_READ | PROT_WRITE);
+    mprotect(&PHYS_MEMORY[(oldPos*PAGE_SIZE) + MEM_SECTION], PAGE_SIZE, PROT_READ | PROT_WRITE);
+    char buffer1[PAGE_SIZE];
+    char buffer2[PAGE_SIZE];
+    //swap out contents of physical memory
+    memcpy(buffer1,&PHYS_MEMORY[(newPos*PAGE_SIZE) + MEM_SECTION],PAGE_SIZE); //what's being swapped out
+    memcpy(buffer2,&PHYS_MEMORY[(oldPos*PAGE_SIZE) + MEM_SECTION],PAGE_SIZE); //what's being swapped in
+    memcpy(&PHYS_MEMORY[(newPos*PAGE_SIZE) + MEM_SECTION],buffer2,PAGE_SIZE);
+    memcpy(&PHYS_MEMORY[(oldPos*PAGE_SIZE) + MEM_SECTION],buffer1,PAGE_SIZE);
+    //swap out contents of meta data?
+    frameMeta fm1;
+    frameMeta fm2;
+    memcpy(&fm1, &frameMetaPhys[newPos], sizeof(fm1));
+    memcpy(&fm2, &frameMetaPhys[oldPos], sizeof(fm2));
+    memcpy(&frameMetaPhys[newPos], &fm2, sizeof(fm1));
+    memcpy(&frameMetaPhys[oldPos], &fm1, sizeof(fm2));
+    mprotect(&PHYS_MEMORY[(oldPos*PAGE_SIZE) + MEM_SECTION], PAGE_SIZE, PROT_NONE);
+  }
+  else
+  {
+    mprotect(&PHYS_MEMORY[(newPos*PAGE_SIZE) + MEM_SECTION], PAGE_SIZE, PROT_READ | PROT_WRITE);
+    //swap out contents of physical memory with page found in disk
+    char buffer1[PAGE_SIZE];
+    char buffer2[PAGE_SIZE];
+    memcpy(buffer1,&PHYS_MEMORY[(newPos*PAGE_SIZE) + MEM_SECTION],PAGE_SIZE); //what's being swapped out
+    lseek(swapFileFD, oldPos * PAGE_SIZE, SEEK_SET); //what's being swapped in
+    read(swapFileFD, buffer2, PAGE_SIZE);
+    memcpy(&PHYS_MEMORY[(newPos*PAGE_SIZE) + MEM_SECTION],buffer2,PAGE_SIZE);
+    write(swapFileFD, buffer1, PAGE_SIZE);
+    //swap out contents of meta data?
+    frameMeta fm1;
+    frameMeta fm2;
+    memcpy(&fm1, &frameMetaPhys[newPos], sizeof(fm1));
+    memcpy(&fm2, &frameMetaSwap[oldPos], sizeof(fm2));
+    memcpy(&frameMetaPhys[newPos], &fm2, sizeof(fm1));
+    memcpy(&frameMetaSwap[oldPos], &fm1, sizeof(fm2));
   }
 
-  //Not in physcial, need to search Swap File
-  lseek(swapFileFD,0,SEEK_SET);
-  for(i=0; i < META_SWAP_S; i++)
-  {
-    if(frameMetaSwap[i].owner == currentThread->tid && frameMetaSwap[i].pageNum == pageLocation) //find page of current thread in swapfile
-    {
-      //unprotect memory of physical memory at PAGE_SIZE * pageLocation
-      mprotect(PHYS_MEMORY[pageLocation*PAGE_SIZE], PAGE_SIZE, PROT_READ | PROT_WRITE);
-      //swap out contents of physical memory with page found in disk
-      char buffer1[PAGE_SIZE];
-      char buffer2[PAGE_SIZE];
-      memcpy(buffer1,PHYS_MEMORY[pageLocation*PAGE_SIZE],PAGE_SIZE); //what's being swapped out
-      lseek(swapFileFD, i * PAGE_SIZE, SEEK_SET); //what's being swapped in
-      read(swapFileFD, buffer2, PAGE_SIZE);
-      memcpy(PHYS_MEMORY[pageLocation*PAGE_SIZE],buffer2,PAGE_SIZE);
-      write(swapFileFD, buffer1, PAGE_SIZE);
-      //swap out contents of meta data?
-      frameMeta fm1;
-      frameMeta fm2;
-      memcpy(&fm1, frameMetaPhys[pageLocation], sizeof(fm1));
-      memcpy(&fm2, frameMetaSwap[i], sizeof(fm2));
-      memcpy(frameMetaPhys[pageLocation], &fm2, sizeof(fm1));
-      memcpy(frameMetaSwap[i], &fm1, sizeof(fm2));
-      return;
-    }
-  }
+  return;
 }
 
 void* myallocate(size_t size_req, char *fileName, int line, char src)
 {
- 
-  //TODO: will we allow allocation greater than 4mb? Fuck no boy
+  notFinished = 1;
+
+  printf("Entering Malloc[%04x]\n",src);
+
   //initialize memory and disk
   if(!isSet)
   {
+    printf("isSet called\n");
     setMem();
   }
 
-  if(size_req <= 0 || size_req > (MEM_SIZE/2) - 3)//don't allow allocations of size 0; would cause internal fragmentation due to headers
+  //printf("Just set memory\n");
+
+  if(size_req <= 0 || size_req > (MEM_SECTION) - 3)//don't allow allocations of size 0; would cause internal fragmentation due to headers
   {
+    notFinished = 0;
+    //printf("CRAP$$$\n");
     return NULL;
   }
 
@@ -1292,39 +1335,41 @@ void* myallocate(size_t size_req, char *fileName, int line, char src)
   //if library call
   if(src == 0)
   {
-    mprotect(PHYS_MEMORY, MEM_SIZE/2, PROT_WRITE | PROT_READ);
     start_index = 0;
-    bound = MEM_SIZE/2;
+    bound = MEM_SECTION;
+    //printf("LIBRARY\n");
   }
-
   //if thread call
   else if(src == 1)
   {
-    start_index = MEM_SIZE/2;
+    start_index = MEM_SECTION;
     bound = MEM_SIZE;
+    printf("USER\n");
+    //printPhysicalMemory();
   }
-
   //reeaaally shouldn't ever happen but just in case
   else
   {
-    printf("Error on source of call to malloc. Exiting...\n");
+    //printf("Error on source of call to malloc. Exiting...\n");
   }
-
+   
   while(start_index < bound)
   {
+    printf("Iterating in malloc main loop, start_index is %i\n", start_index);
     //extract free bit & block size from header
     pageFlag = CREATE_PAGE;
+    //printf("Before Meta\n");
     meta = (PHYS_MEMORY[start_index] << 16) | (PHYS_MEMORY[start_index+1] << 8) | (PHYS_MEMORY[start_index+2]); //if we encounter this spot in memory where there's no page, we'll go to handler to create that new page
+    //printf("After Meta\n");
     pageFlag = CLEAR_FLAG;
     isFree = (meta >> 23) & 0x1;
     blockSize = meta & 0x7fffff;
     //valid block found
     if(isFree && blockSize >= size_req)
-    {
-      
+    {      
       int prev_index = start_index; //in the case that we dont split, we need to increase the blockSize
       //fill in metadata for allocated block
-
+      startAddr = &PHYS_MEMORY[start_index];
       start_index += (size_req + 3);//jump to next block to place new header
       
       // fill in metadata for new free block
@@ -1332,47 +1377,44 @@ void* myallocate(size_t size_req, char *fileName, int line, char src)
 
       if(sizeLeft > 0)//only add new header if enough space remains for allocation of at least one byte
       {
-        pageFlag = EXTEND_PAGES;
-        startAddr = &PHYS_MEMORY[start_index];//pass address of block to global variable in event signal handler is raised (also for return value)
-        raise(SIGSEGV);
-        pageFlag = CLEAR_FLAG;
+        //raise(SIGSEGV);
         PHYS_MEMORY[prev_index] = (size_req >> 16) & 0x7f;
         PHYS_MEMORY[prev_index+1] = (size_req >> 8) & 0xff;
         PHYS_MEMORY[prev_index+2] = size_req & 0xff;
+        pageFlag = EXTEND_PAGES;
         PHYS_MEMORY[start_index] = 0x80 | ((sizeLeft >> 16) & 0x7f);
         PHYS_MEMORY[start_index+1] = (sizeLeft >> 8) & 0xff;
         PHYS_MEMORY[start_index+2] = sizeLeft & 0xff;
+        pageFlag = CLEAR_FLAG;
       }
       else
       {
-        pageFlag = EXTEND_PAGES;
-        startAddr = &PHYS_MEMORY[start_index];//pass address of block to global variable in event signal handler is raised (also for return value)
         request_size = blockSize;
-        raise(SIGSEGV);
-        pageFlag = CLEAR_FLAG;
         //in the event of no split, we need to give extra memory
         PHYS_MEMORY[prev_index] = (blockSize >> 16) & 0x7f;
         PHYS_MEMORY[prev_index+1] = (blockSize >> 8) & 0xff;
         PHYS_MEMORY[prev_index+2] = blockSize & 0xff;
+        pageFlag = EXTEND_PAGES;
+	PHYS_MEMORY[prev_index+(sizeof(unsigned char)*3)+blockSize] = '\0';//intended to raise SIGSEGV, even when we don't split
+        pageFlag = CLEAR_FLAG;
       }
       pageFlag = CLEAR_FLAG;//reset pageFlag
-      mprotect(PHYS_MEMORY, MEM_SIZE/2, PROT_NONE);
-      return startAddr;
-
+      notFinished = 0;
+      printf("Malloc returned an address %li\n", (startAddr + (sizeof(char)*3))-PHYS_MEMORY);
+      return startAddr + (sizeof(char) * 3);
     }
-
     else
     {
       //go to next subsequent header
       start_index += (blockSize + 3);
     }
-
-
   }
   
   //If reached, no valid block could be allocated
   pageFlag = CLEAR_FLAG;//reset pageFlag
-  mprotect(PHYS_MEMORY, MEM_SIZE/2, PROT_NONE);
+
+  notFinished = 0;
+  printf("Malloc returned null\n");
   return NULL;
 }
 
@@ -1380,13 +1422,20 @@ void* myallocate(size_t size_req, char *fileName, int line, char src)
 
 void mydeallocate(void *ptr, char *fileName, int line, char src)
 {
+  notFinished = 1;
+
   if(ptr == NULL)//don't do anything if null pointer passed
-  {
+  {   
+    notFinished = 0;
     return;
   }
-  if(ptr < PHYS_MEMORY || ptr > &PHYS_MEMORY[MEM_SIZE - 1])
+
+  unsigned char *location  = (unsigned char*)ptr;
+
+  if(location < PHYS_MEMORY || location > &PHYS_MEMORY[MEM_SIZE - 1])
   {
     //address the user entered is not within physical memory
+    printf("about raising sigsegv\n");
     raise(SIGSEGV);
   }
   int start_index;
@@ -1394,17 +1443,16 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
   int prevBlock = -1;
   unsigned int meta, nextMeta, prevMeta;
   unsigned char isFree, nextFree, prevFree;
-  unsigned int blockSize, nextSize, prevSize;
-  char *leftoverBlock;
+  unsigned int blockSize=0, nextSize, prevSize;
+  unsigned char *leftoverBlock;
   if(src == 0)//library
   {
-    mprotect(PHYS_MEMORY, MEM_SIZE/2, PROT_WRITE | PROT_READ);
     start_index = 0;
-    bound = MEM_SIZE/2;
+    bound = MEM_SECTION;
 
     while(start_index < bound)
     {
-      if(&PHYS_MEMORY[start_index] == ptr)
+      if(&PHYS_MEMORY[start_index] == location)
       {
         meta = (PHYS_MEMORY[start_index] << 16) | (PHYS_MEMORY[start_index+1] << 8) | (PHYS_MEMORY[start_index+2]);
         isFree = (meta >> 23) & 0x1;
@@ -1412,8 +1460,8 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
 
         if(isFree)//block has already been freed
         {
-	  printf("Attempted Double Free\n");
-	  exit(EXIT_FAILURE);
+	  //printf("Attempted Double Free\n");
+	  pthread_exit(NULL);
         }
 
         PHYS_MEMORY[start_index] = 0x80;//reset free bit
@@ -1428,7 +1476,7 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
 	  if(nextFree)
 	  {
 	    blockSize += nextSize + (sizeof(char) * 3);
-	    PHYS_MEMORY[start_index] = 0x80 | ((blockSize_ >> 16) & 0x7f);
+	    PHYS_MEMORY[start_index] = 0x80 | ((blockSize >> 16) & 0x7f);
             PHYS_MEMORY[start_index+1] = (blockSize >> 8) & 0xff;
             PHYS_MEMORY[start_index+2] = blockSize & 0xff;
 	  }
@@ -1459,17 +1507,16 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
       }
 
     }
-    mprotect(PHYS_MEMORY, MEM_SIZE/2, PROT_NONE);
   }
 
   else //user thread
   {
-    start_index = MEM_SIZE/2;
+    start_index = MEM_SECTION;
     bound = MEM_SIZE;
 
     while(start_index < bound)
     {
-      if(&PHYS_MEMORY[start_index] == ptr)
+      if(&PHYS_MEMORY[start_index] == location)
       {
         meta = (PHYS_MEMORY[start_index] << 16) | (PHYS_MEMORY[start_index+1] << 8) | (PHYS_MEMORY[start_index+2]);
         isFree = (meta >> 23) & 0x1;
@@ -1477,8 +1524,8 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
         leftoverBlock = &PHYS_MEMORY[start_index];
         if(isFree)//block has already been freed
         {
-	  printf("Attempted Double Free\n");
-	  exit(EXIT_FAILURE);
+	  //printf("Attempted Double Free\n");
+	  pthread_exit(NULL);
         }
 
         PHYS_MEMORY[start_index] = 0x80;//reset free bit
@@ -1493,7 +1540,7 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
 	  if(nextFree)
 	  {
 	    blockSize += nextSize + (sizeof(char) * 3);
-	    PHYS_MEMORY[start_index] = 0x80 | ((blockSize_ >> 16) & 0x7f);
+	    PHYS_MEMORY[start_index] = 0x80 | ((blockSize >> 16) & 0x7f);
             PHYS_MEMORY[start_index+1] = (blockSize >> 8) & 0xff;
             PHYS_MEMORY[start_index+2] = blockSize & 0xff;
 	  }
@@ -1519,6 +1566,7 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
         startAddr = leftoverBlock;
         blockToFreeSize = blockSize;
         pageFlag = FREE_FRAMES;
+        printf("about to raise sigsegv\n");
         raise(SIGSEGV);
         pageFlag = CLEAR_FLAG;
         break;
@@ -1532,22 +1580,23 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
     }    
 
   }
-  
+  notFinished = 0;
 }
+void printPhysicalMemory()
+{
 
+  unsigned int meta;
+  char isFree;
+  int blockSize;
+  int start_index = 0;
+  int end_index = MEM_SIZE;
+  while(start_index < end_index){
+    meta = (PHYS_MEMORY[start_index] << 16) | (PHYS_MEMORY[start_index+1] << 8) | (PHYS_MEMORY[start_index+2]);
+    isFree = (meta >> 23) & 0x1;
+    blockSize = meta & 0x7fffff;
+    printf("We are on start_index %i which has a block of size %i and it is free? %i\n", start_index, blockSize, isFree);
+    fflush(stdout);
+    start_index += sizeof(char) * 3 + blockSize;
+  }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+}

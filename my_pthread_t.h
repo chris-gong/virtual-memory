@@ -8,6 +8,32 @@
 #ifndef MY_PTHREAD_T_H
 #define MY_PTHREAD_T_H
 
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ucontext.h>
+#include <signal.h>
+#include <sys/time.h>
+#include <errno.h>
+#include <math.h>
+#include <sys/mman.h>
+#include <malloc.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
+/*
+	MEMORY MANAGER
+==============================================================
+*/
+
+#define malloc(x) myallocate(x, __FILE__, __LINE__, 1) //1 for user
+#define free(x) mydeallocate(x, __FILE__, __LINE__, 1) //1 for user
+
+//============================================================
+
 #define pthread_create(a, b, c, d) my_pthread_create(a, b, c, d)
 #define pthread_yield() my_pthread_yield()
 #define pthread_exit(a) my_pthread_exit(a)
@@ -17,20 +43,10 @@
 #define pthread_mutex_unlock(a) my_pthread_mutex_unlock(a)
 #define pthread_mutex_destroy(a) my_pthread_mutex_destroy(a)
 
+
 #define _GNU_SOURCE
 
 /* include lib header files that you need here: */
-#include <unistd.h>
-#include <sys/syscall.h>
-#include <sys/types.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ucontext.h>
-//#include <malloc.h>
-#include <signal.h>
-#include <sys/time.h>
-#include <errno.h>
 
 //L: So our pthreads are just unsigned ints? I guess that means make a thread ID?
 typedef uint my_pthread_t;
@@ -122,5 +138,25 @@ int my_pthread_mutex_destroy(my_pthread_mutex_t *mutex);
 void initializeMainContext();
 
 void initializeGarbageContext();
-#endif
 
+/*
+	MEMORY MANAGER
+==========================================================================================
+*/
+
+//Function to allocate from static array
+void* myallocate(size_t, char*, int, char);
+void mydeallocate(void*, char*, int, char);
+void initializeSwapFile();
+void swapMe(int, int, int);
+void setMem();
+void printPhysicalMemory();
+
+//struct to hold: leftmost:freebit, pageNum, and Thread ID
+typedef struct frameMeta
+{
+  char isFree;//if frame is available for use
+  unsigned int owner;//thread ID
+  unsigned int pageNum;
+}frameMeta;
+#endif
