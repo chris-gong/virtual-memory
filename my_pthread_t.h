@@ -139,6 +139,8 @@ void initializeMainContext();
 
 void initializeGarbageContext();
 
+void printAllThreads();
+
 /*
 	MEMORY MANAGER
 ==========================================================================================
@@ -153,6 +155,7 @@ void setMem();
 void printPhysicalMemory();
 void printCurrentThreadMemory();
 void printFrameMetaPhys();
+void printRunningQueue();
 
 //struct to hold: leftmost:freebit, pageNum, and Thread ID
 typedef struct frameMeta
