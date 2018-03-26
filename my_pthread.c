@@ -26,6 +26,7 @@
 #define MEM_SECTION (MEM_SIZE/2)
 #define META_SWAP_S (FILE_SIZE/PAGE_SIZE)
 #define META_PHYS_S ((MEM_SIZE/PAGE_SIZE)/2)
+#define SHALLOC_REGION (4 * PAGE_SIZE)
 #define CLEAR_FLAG 0
 #define CREATE_PAGE 1
 #define CONTEXT_SWITCH 2
@@ -165,6 +166,8 @@ void scheduler(int signum)
         { 
           //getting a new thread to run
           currentThread = dequeue(&runningQueue[i]);
+	  printf("[In Ready] STATUS curr: %d\n",currentThread->status);
+	  printf("[In Ready] STATUS prev: %d\n",prevThread->status);
 	  break;
         }
 	else
@@ -172,7 +175,7 @@ void scheduler(int signum)
 	}
       }
 
-      if(currentThread == NULL)
+      if(currentThread == NULL || currentThread->context == NULL)
       {
         currentThread = prevThread;
       }
@@ -184,17 +187,23 @@ void scheduler(int signum)
       //////printf("YIELD\n");
       currentThread = NULL;
       ////printf("-----------------------running queue before picking out the next thread--------------------------------------\n");
-      printRunningQueue();
+      //printRunningQueue();
       for (i = 0; i < MAX_SIZE; i++) 
       {
         if (runningQueue[i] != NULL)
         { 
           currentThread = dequeue(&runningQueue[i]);
+	  if (currentThread->context == NULL)
+	  {
+		continue;
+	  }
+	  printf("[In Yield] STATUS curr: %d\n",currentThread->status);
+	  printf("[In Yield] STATUS prev: %d\n",prevThread->status);
 	  break;
         }
       }
       
-      if(currentThread != NULL)
+      if(currentThread != NULL && currentThread->context != NULL)
       {
 	//later consider enqueuing it to the waiting queue instead
 	enqueue(&runningQueue[prevThread->priority], prevThread);
@@ -204,7 +213,7 @@ void scheduler(int signum)
 	currentThread = prevThread;
       }
       ////printf("-----------------------running queue after picking out the next thread--------------------------------------\n");
-      printRunningQueue();
+     // printRunningQueue();
       //printRunningQueue();
       ////printf("CASE YIELD: prevThread: %d\tcurrentThread: %d\n", prevThread->tid, currentThread->tid);
 
@@ -228,16 +237,19 @@ void scheduler(int signum)
         if (runningQueue[i] != NULL)
         {
           currentThread = dequeue(&runningQueue[i]);
+	  printf("[In Exit] STATUS curr: %d\n",currentThread->status);
+	  printf("[In Exit] STATUS prev: %d\n",prevThread->status);
 	  break;
         }
       }
 
-      if(currentThread == NULL)
+      if(currentThread == NULL || currentThread->context == NULL)
       {
 	//L: what if other threads exist but none are in running queue?
 	////////printf("No other threads found. Exiting\n");
 
 	//L: DO NOT USE EXIT() HERE. THAT IS A LEGIT TIME BOMB. ONLY USE RETURN
+        close(swapFileFD);
         return;
       }
       //L: free the thread control block and ucontext
@@ -287,7 +299,7 @@ void scheduler(int signum)
         }
       }
 
-      if(currentThread == NULL)
+      if(currentThread == NULL || currentThread->context == NULL)
       {
 	/*WE'VE GOT A PROBLEM*/
 	exit(EXIT_FAILURE);
@@ -309,7 +321,7 @@ void scheduler(int signum)
         }
       }
 
-      if(currentThread == NULL)
+      if(currentThread == NULL || currentThread->context == NULL)
       {
         /*OH SHIT DEADLOCK*/
         //////////printf("DEADLOCK DETECTED\n");
@@ -613,10 +625,13 @@ tcb* thread_search(my_pthread_t tid)
   list *temp = allThreads[key];
   while(allThreads[key] != NULL)
   {
-    if(allThreads[key]->thread->tid == tid)
+    if (allThreads[key]->thread != NULL)
     {
-      ret = allThreads[key]->thread;
-      break;
+      if(allThreads[key]->thread->tid == tid)
+      {
+        ret = allThreads[key]->thread;
+        break;
+      }
     }
     allThreads[key] = allThreads[key]->next;
   }
@@ -760,7 +775,7 @@ int my_pthread_yield()
   //L: return to signal handler/scheduler
   currentThread->status = YIELD;
   ////printf("AT THE END OF PTHREAD YIELD, RUNNING QUEUE LOOKS LIKE>>>\n");
-  printRunningQueue();
+  //printRunningQueue();
   notFinished = 0;
   return raise(SIGVTALRM);
 }
@@ -997,7 +1012,7 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
   }
   else if(pageFlag == CLEAR_FLAG) //thread/user or library/OS accessing invalid memory
   {
-    ////////printf("->Segmentation Fault\n");
+    printf("->Segmentation Fault\n");
     pthread_exit(NULL);
     //////////printf("Fuck this shit\n");
   }
@@ -1012,20 +1027,13 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
     //assuming for the first malloc in a thread
     //printCurrentThreadMemory();
     //////printf("isFree: %04x\n",frameMetaPhys[0].isFree);
-    fflush(stdout);
     if(frameMetaPhys[0].isFree)
     {
       ////printf("---->Up for grabs\n");
       //if this page isn't owned by any thread
       frameMetaPhys[0].isFree = 0;
-      //////printf("One\n");
-      fflush(stdout);
       frameMetaPhys[0].owner = currentThread->tid;
-      //////printf("Two\n");
-      fflush(stdout);
       frameMetaPhys[0].pageNum = 0;
-      //////printf("Three\n");
-      fflush(stdout);
       //swapMe(0,i,i); //swap the meta we just inserted into the right spot
     }
     else if(frameMetaPhys[0].owner != currentThread->tid)
@@ -1117,6 +1125,7 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
     }
 
     next_pageNum = left_pageNum + 1;
+    //TODO: CHRIS, fix this, it's yelling at us and I don't want to risk it
     if(next_pageNum < endOfPhys && start_pageNum + headerSize <= &PHYS_MEMORY[(next_pageNum * PAGE_SIZE)+MEM_SECTION])
     {
       left_pageNum = start_pageNum;
@@ -1231,7 +1240,7 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
     }
     //////printframeMetaPhys();
     ////printf("the running queue after a context switch\n");
-    printRunningQueue();
+    //printRunningQueue();
   }
   else if(pageFlag == FREE_FRAMES)
   {
@@ -1307,18 +1316,21 @@ void setMem()
   //set up two blocks of size 4 MB, first half is user memory, second half is OS/library memory
   //create blocks of size MEM_SECTION [MEM_SIZE/2]
   unsigned char freeBit = 0x80;
-  int totalSize = (MEM_SECTION) - 3; //-3 because headers are 3 bytes
+  int totalSize = (MEM_SECTION) - SHALLOC_REGION - 3; //-3 because headers are 3 bytes
 
   //Allocation metadata: leftmost bit for free bit, 23 bits for allocation size
   //first the OS memory
   PHYS_MEMORY[0] = freeBit | ((totalSize >> 16) & 0x7f);
   PHYS_MEMORY[1] = (totalSize >> 8) & 0xff;
   PHYS_MEMORY[2] = totalSize & 0xff;
-  /*
-  //second the user memory
-  PHYS_MEMORY[pIndex] = freeBit | ((totalSize >> 16) & 0x7f);
-  PHYS_MEMORY[pIndex+1] = (totalSize >> 8) & 0xff;
-  PHYS_MEMORY[pIndex+2] = totalSize & 0xff; */   
+
+  totalSize = SHALLOC_REGION - 3; //-3 because headers are 3 bytes
+  int shallocIndex = MEM_SECTION - SHALLOC_REGION;
+  
+  //second the shalloc region
+  PHYS_MEMORY[shallocIndex] = freeBit | ((totalSize >> 16) & 0x7f);
+  PHYS_MEMORY[shallocIndex+1] = (totalSize >> 8) & 0xff;
+  PHYS_MEMORY[shallocIndex+2] = totalSize & 0xff;
 
   //Initialize MetaPhys
   int i = 0;
@@ -1444,13 +1456,13 @@ void* myallocate(size_t size_req, char *fileName, int line, char src)
   }
 
   //////////printf("Just set memory\n");
-
-  if(size_req <= 0 || size_req > (MEM_SECTION - 3))//don't allow allocations of size 0; would cause internal fragmentation due to headers
+  //TODO:Check if this can in fact be moved
+  /*if(size_req <= 0 || size_req > (MEM_SECTION - 3))//don't allow allocations of size 0; would cause internal fragmentation due to headers
   {
     notFinished = 0;
     //////////printf("CRAP$$$\n");
     return NULL;
-  }
+  }*/
 
   request_size = size_req;//set request size global to transfer to signal handler
 
@@ -1463,6 +1475,12 @@ void* myallocate(size_t size_req, char *fileName, int line, char src)
   //if library call
   if(src == 0)
   {
+    if(size_req <= 0 || size_req > (MEM_SECTION - SHALLOC_REGION - 3))//don't allow allocations of size 0; would cause internal fragmentation due to headers
+    {
+      notFinished = 0;
+      //////////printf("CRAP$$$\n");
+      return NULL;
+    }
     start_index = 0;
     bound = MEM_SECTION;
     //////printf("--->LIBRARY MALLOC\n");
@@ -1470,6 +1488,12 @@ void* myallocate(size_t size_req, char *fileName, int line, char src)
   //if thread call
   else if(src == 1)
   {
+    if(size_req <= 0 || size_req > (MEM_SECTION - 3))//don't allow allocations of size 0; would cause internal fragmentation due to headers
+    {
+      notFinished = 0;
+      //////////printf("CRAP$$$\n");
+      return NULL;
+    }
     start_index = MEM_SECTION;
     bound = MEM_SIZE;
     //////printf("--->USER MALLOC\n");
@@ -1547,7 +1571,7 @@ void* myallocate(size_t size_req, char *fileName, int line, char src)
   //If reached, no valid block could be allocated
   pageFlag = CLEAR_FLAG;//reset pageFlag
 
-  notFinished = 0;
+  //********************************************************************************notFinished = 0;
   //printf("Malloc returned null\n");
   //printPhysicalMemory();
   //////printf("----------------------------------------------\n");
@@ -1574,6 +1598,13 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
     ////////printf("about raising sigsegv\n");
     raise(SIGSEGV);
   }
+
+  if (location >= &PHYS_MEMORY[MEM_SECTION - SHALLOC_REGION] && location < &PHYS_MEMORY[MEM_SECTION])
+  {
+    //Although user threads access shalloc region, there are no frames like the library, so treat it like it's the library
+    src = -1;
+  }
+
   int start_index;
   int bound;
   int prevBlock = -1;
@@ -1581,11 +1612,20 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
   unsigned char isFree, nextFree, prevFree;
   unsigned int blockSize=0, nextSize, prevSize;
   unsigned char *leftoverBlock;
-  if(src == 0)//library
+  if(src <= 0)//library
   {
-    ////printf("--->Library Free\n");
-    start_index = sizeof(char)*3;
-    bound = MEM_SECTION;
+    if (src == -1)
+    {
+      printf("--->Shalloc Free<---\n");
+      start_index = sizeof(char)*3 + (MEM_SECTION - SHALLOC_REGION);
+      bound = MEM_SECTION;
+    }
+    else
+    {
+      printf("--->Library Free<---\n");
+      start_index = sizeof(char)*3;
+      bound = MEM_SECTION - SHALLOC_REGION;
+    }
 
     while(start_index < bound)
     {
@@ -1604,7 +1644,7 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
         PHYS_MEMORY[start_index-3] = 0x80;//reset free bit
 
         //coalesce with next block
-        if(start_index + blockSize < MEM_SIZE)
+        if(start_index + blockSize < bound)
         {
   	  nextMeta = (PHYS_MEMORY[start_index + blockSize] << 16) | (PHYS_MEMORY[start_index + blockSize + 1] << 8) | (PHYS_MEMORY[start_index + blockSize + 2]);
           nextFree = (nextMeta >> 23) & 0x1;
@@ -1648,7 +1688,7 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
 
   else //user thread
   {
-    ////printf("--->User Free\n");
+    printf("--->Regular User Free<---\n");
     start_index = MEM_SECTION +(sizeof(char)*3);
     bound = MEM_SIZE;
 
@@ -1730,8 +1770,86 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
   /*void **addrToNull = &ptr;
   *addrToNull = NULL;*/
 
-  notFinished = 0;
+  //************************************************************************************notFinished = 0;
 }
+
+void* shalloc(size_t size)
+{
+  notFinished = 1;
+
+  if(!isSet)
+  {
+    setMem();
+  }
+
+  if(size <= 0 || size > SHALLOC_REGION)//don't allow allocations of size 0; would cause internal fragmentation due to headers
+  {
+    //notFinished = 0;
+    //////////printf("CRAP$$$\n");
+    return NULL;
+  }
+
+  request_size = size;//set request size global to transfer to signal handler
+
+  unsigned int start_index, bound;
+  unsigned int meta; 
+  unsigned int isFree, blockSize;
+  start_index = MEM_SECTION - SHALLOC_REGION;
+  printf("Start index: %d\n",start_index);
+  bound = MEM_SECTION;
+
+  while(start_index < bound)
+  {
+    //extract free bit & block size from header
+    meta = (PHYS_MEMORY[start_index] << 16) | (PHYS_MEMORY[start_index+1] << 8) | (PHYS_MEMORY[start_index+2]); //if we encounter this spot in memory where there's no page, we'll go to handler to create that new page
+    isFree = (meta >> 23) & 0x1;
+    blockSize = meta & 0x7fffff;
+
+    //valid block found
+    if(isFree && blockSize >= size)
+    {      
+      int prev_index = start_index; //in the case that we dont split, we need to increase the blockSize
+      //fill in metadata for allocated block
+      startAddr = &PHYS_MEMORY[start_index];
+      start_index += size + 3;//jump to next block to place new header
+      
+      // fill in metadata for new free block
+      int sizeLeft = blockSize - size - 3;
+
+      if(sizeLeft > 0)//only add new header if enough space remains for allocation of at least one byte
+      {
+        PHYS_MEMORY[prev_index] = (size >> 16) & 0x7f;
+        PHYS_MEMORY[prev_index+1] = (size >> 8) & 0xff;
+        PHYS_MEMORY[prev_index+2] = size & 0xff;
+        PHYS_MEMORY[start_index] = 0x80 | ((sizeLeft >> 16) & 0x7f);
+        PHYS_MEMORY[start_index+1] = (sizeLeft >> 8) & 0xff;
+        PHYS_MEMORY[start_index+2] = sizeLeft & 0xff;
+      }
+      else
+      {
+        request_size = blockSize;
+        PHYS_MEMORY[prev_index] = (blockSize >> 16) & 0x7f;
+        PHYS_MEMORY[prev_index+1] = (blockSize >> 8) & 0xff;
+        PHYS_MEMORY[prev_index+2] = blockSize & 0xff;
+      }
+      notFinished = 0;
+      printf("Valid Shalloc; returning address\n");
+      //Valid Shalloc; returning address
+      return startAddr + (sizeof(char) * 3);
+    }
+    else
+    {
+      //go to next subsequent header
+      start_index += (blockSize + (sizeof(char)*3));
+    }
+  }
+
+  //Can't satisfy request, returning NULL
+  printf("Can't satisfy shalloc request, returning NULL\n");
+  return NULL;
+}
+
+
 /*void printPhysicalMemory()
 {
   unsigned int meta;
@@ -1812,5 +1930,7 @@ void printRunningQueue()
     runningQueue[i] = temp;
   }
 }
+
+
 
 

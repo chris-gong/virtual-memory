@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 <<<<<<< HEAD
+<<<<<<< HEAD
 #include <signal.h>
 #include <math.h>
 #include <sys/mman.h>
@@ -31,6 +32,8 @@ typedef struct frameMeta
   unsigned int pageNum;
 }frameMeta;
 =======
+=======
+>>>>>>> 21fb54dd7fb473f5704d8e78cf372e08566da850
 #include "my_pthread_t.h"
 
 #define malloc(x) myallocate((x), __FILE__, __LINE__, currentThread)
@@ -41,4 +44,7 @@ typedef struct frameMeta
 void* myallocate(size_t, char*, int, tcb*);
 
 void mydeallocate(void*, char*, int, tcb*);
+<<<<<<< HEAD
 >>>>>>> why god why
+=======
+>>>>>>> 21fb54dd7fb473f5704d8e78cf372e08566da850
