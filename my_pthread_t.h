@@ -152,6 +152,7 @@ void swapMe(int, int, int);
 void setMem();
 void printPhysicalMemory();
 void printCurrentThreadMemory();
+void printFrameMetaPhys();
 
 //struct to hold: leftmost:freebit, pageNum, and Thread ID
 typedef struct frameMeta

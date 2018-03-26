@@ -22,16 +22,16 @@ int main(int argc, char *argv[])
 	int pass2=2;
 	printf("Creating Thread 2\n");
 	pthread_create(&id2, NULL, threadFunc, &pass2);
-	/*int pass3=3;
+	int pass3=3;
 	printf("Creating Thread 3\n");
 	pthread_create(&id3, NULL, threadFunc, &pass3);
-	int pass4=4;
+	/*int pass4=4;
 	printf("Creating Thread 4\n");
 	pthread_create(&id4, NULL, threadFunc, &pass4);
 	int pass5=5;
 	printf("Creating Thread 5\n");
 	pthread_create(&id5, NULL, threadFunc, &pass5);*/
-
+	printf("Main about to finish<<<<<<<<<<<<<<<<<<<ya bitch\n");
 	pthread_exit(NULL);
 
 	return 0;
@@ -39,9 +39,9 @@ int main(int argc, char *argv[])
 
 void *threadFunc(void *arg)
 {
-	printf("~~~~~~~~~~~~~~~~~~I'm a new Thread!~~~~~~~~~~~~~~~~~~~\n");
-	int t = (*(int*)arg);
 
+	int t = (*(int*)arg);
+	printf("~~~~~~~~~~~~~~~~~~I'm a new Thread %i!~~~~~~~~~~~~~~~~~~~\n", t);
 	char* string = (char*)malloc(sizeof(char) * (MEM_SECTION-3));
 	sprintf(string, "Bruh, this thread [%d] just allocated!\n",t);
 	printf("%s\n",string);
