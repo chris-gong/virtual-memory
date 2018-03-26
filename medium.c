@@ -4,34 +4,34 @@
 #include "my_pthread_t.h"
 
 #define THREAD_NUM 16
+#define MEM_SIZE (1024 * 1024 * 8)
+#define MEM_SECTION (MEM_SIZE/2)
 
 pthread_t threads[THREAD_NUM];
 pthread_t extraThreads[THREAD_NUM];
-int indicies[THREAD_NUM];
+//int indicies[THREAD_NUM];
 void *threadFunc(void *);
 void *threadFunc2(void*);
 
 int main(int argc, char *argv[])
 {
-/*
-	//printf("Beginning of Hell\n");
-	indicies[0] = 123;
-        indicies[1] = 456;
-	pthread_create(&threads[0], NULL, threadFunc, &indicies[0]);
-        pthread_create(&threads[1], NULL, threadFunc, &indicies[1]);
-	//printf("End of Hell\n");
-	pthread_exit(NULL);
-*/
+	int pass=1;
+        pthread_t id,id2,id3,id4,id5;
+	printf("Creating Thread 1\n");
+	pthread_create(&id, NULL, threadFunc, &pass);
+	int pass2=2;
+	printf("Creating Thread 2\n");
+	pthread_create(&id2, NULL, threadFunc, &pass2);
+	/*int pass3=3;
+	printf("Creating Thread 3\n");
+	pthread_create(&id3, NULL, threadFunc, &pass3);
+	int pass4=4;
+	printf("Creating Thread 4\n");
+	pthread_create(&id4, NULL, threadFunc, &pass4);
+	int pass5=5;
+	printf("Creating Thread 5\n");
+	pthread_create(&id5, NULL, threadFunc, &pass5);*/
 
-	int i;
-	for(i = 0; i < THREAD_NUM; i++)
-	{
-		indicies[i] = i;
-		pthread_create(&threads[i], NULL, threadFunc, &indicies[i]);
-		//printf("Creating thread %d\n", i+1);
-	}
-
-	//printf("Main Exiting...\n");
 	pthread_exit(NULL);
 
 	return 0;
@@ -39,28 +39,13 @@ int main(int argc, char *argv[])
 
 void *threadFunc(void *arg)
 {
-	//printf("I'm a new Thread!\n");
-	int t = (*(int*)arg)+1;
+	printf("~~~~~~~~~~~~~~~~~~I'm a new Thread!~~~~~~~~~~~~~~~~~~~\n");
+	int t = (*(int*)arg);
 
-	char* string = (char*)malloc(sizeof(char) * 4092);
-	sprintf(string, "This thread passed: %d", t);
-	//printf("%s FROM ADDRESS: %p\n", string, string);
-	//free(string);
-
-	////printf("Thread %d creating a child thread\n", t);
-	//pthread_create(&extraThreads[t-1], NULL, threadFunc2, &indicies[t-1]);
-
-
-	//printf("@@@	Thread #%d finished	@@@\n",t);
-
-	return NULL;
-}
-
-void *threadFunc2(void *arg)
-{
-	int parent = *(int*)arg;
-	//printf("I am a simple thread. My parent is: %d\n", parent);
-
+	char* string = (char*)malloc(sizeof(char) * (MEM_SECTION-3));
+	sprintf(string, "Bruh, this thread [%d] just allocated!\n",t);
+	printf("%s\n",string);
+	pthread_yield();
 
 	return NULL;
 }

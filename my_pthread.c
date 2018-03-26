@@ -20,11 +20,11 @@
 
 //-----------------------------
 #define MEM_SIZE (1024 * 1024 * 8)
-#define DISK_SIZE (1024 * 1024 * 16)
+#define FILE_SIZE (1024 * 1024 * 16)
 #define PAGE_SIZE (1024 * 4)
 #define MAX_PAGES (1024 * 1024 * 8)/(1024 * 4)
 #define MEM_SECTION (MEM_SIZE/2)
-#define META_SWAP_S (DISK_SIZE/PAGE_SIZE)
+#define META_SWAP_S (FILE_SIZE/PAGE_SIZE)
 #define META_PHYS_S ((MEM_SIZE/PAGE_SIZE)/2)
 #define CLEAR_FLAG 0
 #define CREATE_PAGE 1
@@ -51,8 +51,8 @@ short pageFlag;//0 = no error, 1 = malloc-request, 2 free coalescing
 size_t request_size;//requested size from malloc
 unsigned char* startAddr;//on a malloc, address of a already allocated header, but we need to now actually make all its frame metas
 unsigned char* endAddr;//for free only, used in conjuction with startAddr to decide how many pages to free
-FILE* swapfile;//disk space to hold page frames
-int isSet;//flag to initialize memory, disk, and metadata
+FILE* swapfile;//swap file space to hold page frames
+int isSet;//flag to initialize memory, swap file, and metadata
 int swapFileFD;//Swap file file descriptor
 int blockToFreeSize;//used in the signal handler to find out how many pages we need to free (frame meta wise)
 
@@ -373,7 +373,7 @@ void maintenance()
 void garbage_collection()
 {
   //L: Block signal here
-  //printf("entering garbage collection\n");
+  printf("entering garbage collection\n");
   notFinished = 1;
   
   //if we havent called pthread create yet
@@ -389,7 +389,7 @@ void garbage_collection()
   {
     if(frameMetaPhys[i].owner == currentThread->tid && !frameMetaPhys[i].isFree)
     {
-      //printf("Hi, I'm Thread#%d, you may remember me from such pages as %i\n",currentThread->tid,i);
+      printf("Hi, I'm Thread#%d, you may remember me from such pages as %i\n",currentThread->tid,i);
       bzero(&PHYS_MEMORY[(frameMetaPhys[i].pageNum * PAGE_SIZE) + MEM_SECTION], PAGE_SIZE);
       mprotect(&PHYS_MEMORY[(frameMetaPhys[i].pageNum * PAGE_SIZE) + MEM_SECTION], PAGE_SIZE, PROT_NONE);
 
@@ -941,13 +941,13 @@ void initializeQueues(list** runQ)
 
 static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
 {
-  ////printf("entering memory manager\n");
+  printf("entering memory manager\tPage Flag: %d\n",pageFlag);
   notFinished = 1;
   unsigned char *src_page = (unsigned char *)si->si_addr;
   //////printf("si_addr is %p\n", si->si_addr);
   int src_offset = src_page - &PHYS_MEMORY[MEM_SECTION];
   int src_pageNum = (src_offset/PAGE_SIZE) + MEM_SECTION;//index in PHYS_MEMORY in page
-  //////printf("We are in the memory manager src_offset: %i\n", src_offset);
+  ////printf("We are in the memory manager src_offset: %i\n", src_offset);
   if(pageFlag == EXIT_ERROR)
   {
     //printf("Fuck this shit\n");
@@ -964,8 +964,8 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
     ////printf("Creating first page...\n");
     //check if page we are on is not owned by any thread at all (may need to swap out)
     //requires creating new pages
-    //look to see if there's enough room on physical and disk to fit new pages requested
-    //insert frame metas either in physical or disk for the malloc request
+    //look to see if there's enough room on physical and swap file to fit new pages requested
+    //insert frame metas either in physical or swap file for the malloc request
     //check physical memory first
     //assuming for the first malloc in a thread
     //printCurrentThreadMemory();
@@ -973,7 +973,7 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
     fflush(stdout);
     if(frameMetaPhys[0].isFree)
     {
-      //printf("---->OKAY, how about here?\n");
+      printf("---->Up for grabs\n");
       //if this page isn't owned by any thread
       frameMetaPhys[0].isFree = 0;
       //printf("One\n");
@@ -990,10 +990,10 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
     {
       //if this page is owned by another thread, need to swap it out after inserting page to somewhere in physical mem or swap file
       //first find open page in physical or swap file
-      //printf("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$is it here?\n");
+      printf("---->Need to swap someone out\n");
       int j;
       int foundInPhys = 0;
-      int foundInDisk = 0;
+      int foundOnFile = 0;
       //check phys
       for(j = 1; j < META_PHYS_S; j++)
       {
@@ -1007,7 +1007,7 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
           break;
         }
       }
-      //check disk
+      //check file
       if(!foundInPhys)
       {
         for(j = 0; j < META_SWAP_S; j++)
@@ -1017,14 +1017,15 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
             frameMetaSwap[j].isFree = 0;
             frameMetaSwap[j].owner = currentThread->tid;
             frameMetaSwap[j].pageNum = 0;
+            printf("Swapping from file...\n");
             swapMe(1,0,j); //swap the meta we just inserted into the right spot
-            foundInDisk = 1;
+            foundOnFile = 1;
             break;
           }
         }
-        if(!foundInDisk)
+        if(!foundOnFile)
         {
-          //////printf("Ran out of memory in both physical and disk\n");
+          //////printf("Ran out of memory in both physical and file\n");
           startAddr = NULL;
           notFinished = 0;
           return;
@@ -1032,7 +1033,7 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
       }
     }
     //printf("################################################SUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUPPPPPPPPPP!\n");
-    fflush(stdout);
+    //fflush(stdout);
     mprotect(&PHYS_MEMORY[MEM_SECTION], PAGE_SIZE, PROT_READ | PROT_WRITE);
     //create page in physical memory with initial header (need this because of fucking bzero wtffffffff)
     unsigned char freeBit = 0x80;
@@ -1041,8 +1042,8 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
     PHYS_MEMORY[MEM_SECTION+1] = (totalSize >> 8) & 0xff;
     PHYS_MEMORY[MEM_SECTION+2] = totalSize & 0xff;
     //printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
-    fflush(stdout);
-    printCurrentThreadMemory();
+    //fflush(stdout);
+    //printCurrentThreadMemory();
   }
   else if(pageFlag == EXTEND_PAGES) //a free block within a page owned by a thread in physical mem found [this is First Fit]
   {
@@ -1060,11 +1061,11 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
     int right_pageNum = 0;
     int left_pageNum = start_pageNum + 1; //these are the bounds for where we're gonna create pages
     //check if header is split among two pages
-    if(next_pageNum < endOfPhys && src_page + headerSize <= &PHYS_MEMORY[next_pageNum * PAGE_SIZE])
+    if(next_pageNum < endOfPhys && src_page + headerSize <= &PHYS_MEMORY[(next_pageNum * PAGE_SIZE)+MEM_SECTION])
     {
       right_pageNum = src_pageNum;
     }
-    else if(next_pageNum < endOfPhys)
+    else if(next_pageNum >= endOfPhys)
     {
       right_pageNum = src_pageNum;
     }
@@ -1072,12 +1073,27 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
     {
       right_pageNum = next_pageNum;
     }
-    //look to see if there's enough room on physical and disk to fit new pages needed for request
+
+    next_pageNum = left_pageNum + 1;
+    if(next_pageNum < endOfPhys && start_pageNum + headerSize <= &PHYS_MEMORY[(next_pageNum * PAGE_SIZE)+MEM_SECTION])
+    {
+      left_pageNum = start_pageNum;
+    }
+    else if(next_pageNum >= endOfPhys)
+    {
+      left_pageNum = start_pageNum;
+    }
+    else
+    {
+      left_pageNum = next_pageNum;
+    }
+    //look to see if there's enough room on physical and swap file to fit new pages needed for request
     int i;
-    //insert frame metas either in physical or disk for the malloc request
+    //insert frame metas either in physical or swap file for the malloc request
     //check physical memory first
     int leftFrameIndex = left_pageNum - MEM_SECTION;
     int rightFrameIndex = right_pageNum - MEM_SECTION;
+    printf("left frame index: %i, right frame index: %i\n", leftFrameIndex, rightFrameIndex);
     for(i = leftFrameIndex; i <= rightFrameIndex; i++)
     {
       if(frameMetaPhys[i].isFree)
@@ -1095,7 +1111,7 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
         //first find open page in physical or swap file
         int j;
         int foundInPhys = 0;
-        int foundInDisk = 0;
+        int foundOnFile = 0;
         //check phys
         for(j = i + 1; j < META_PHYS_S; j++)
         {
@@ -1109,7 +1125,7 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
             break;
           }
         }
-        //check disk
+        //check swap file
         if(!foundInPhys)
         {
           for(j = 0; j < META_SWAP_S; j++)
@@ -1119,14 +1135,15 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
               frameMetaSwap[j].isFree = 0;
               frameMetaSwap[j].owner = currentThread->tid;
               frameMetaSwap[j].pageNum = i;
+	      printf("Swapping from file [2]\n");
               swapMe(1, i, j); //swap the meta we just inserted into the right spot
-              foundInDisk = 1;
+              foundOnFile = 1;
               break;
             }
           }
-          if(!foundInDisk)
+          if(!foundOnFile)
           {
-            //////printf("Ran out of memory in both physical and disk\n");
+            //////printf("Ran out of memory in both physical and swap\n");
             startAddr = NULL;
 	    notFinished = 0;
             return;
@@ -1156,14 +1173,18 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
           swapMe(0,frameMetaPhys[i].pageNum,i);
 	}
       }
+      /*else
+      {
+	 mprotect(&PHYS_MEMORY[MEM_SECTION + (i * PAGE_SIZE)], PAGE_SIZE, PROT_NONE);
+      }*/
     }
     //find all pages that belong to current thread on swap file
     for(i = 0; i < META_SWAP_S; i++)
     {
-      if(frameMetaSwap[i].owner == currentThread->tid)
+      if(frameMetaSwap[i].owner == currentThread->tid && !frameMetaSwap[i].isFree)
       {
 	////printf("Swap\n");
-        swapMe(1,frameMetaPhys[i].pageNum,i);
+        swapMe(1,frameMetaSwap[i].pageNum,i);
       }
     }
   }
@@ -1179,15 +1200,20 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
     int leftPageNum = 0;
     int rightPageNum = 0;
     //check if header is split among two pages
-    if(next_pageNum < endOfPhys && src_page + headerSize <= &PHYS_MEMORY[next_pageNum * PAGE_SIZE])
+    printf("Source Offset [index in USR Memory]: %d\n",src_offset);
+    if(next_pageNum < endOfPhys && src_page + headerSize <= &PHYS_MEMORY[(next_pageNum * PAGE_SIZE) + MEM_SECTION])
     {
+      printf("No Split\n");
       leftPageNum = src_pageNum;
     }
-    else if(next_pageNum < endOfPhys)
+    else if(next_pageNum >= endOfPhys)
     {
+      printf("No split because on last page\n");
       leftPageNum = src_pageNum;
     }
-    else{
+    else
+    {
+      printf("Split\n");
       leftPageNum = next_pageNum;
     }
     //have to calculate right page num
@@ -1195,22 +1221,22 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
     int end_offset = endAddr - &PHYS_MEMORY[MEM_SECTION];
     ////printf("end_offset %i, src_offset %i\n", end_offset, src_offset);
     rightPageNum = end_offset/PAGE_SIZE;
-    if(rightPageNum % PAGE_SIZE == 0 && rightPageNum != 0)
-    {
-      rightPageNum--;
-    }
+
+    printf("start page num: %i start offset %i, end page num: %i end offset: %i\n", src_pageNum, src_offset, rightPageNum, end_offset);
     int i;
-    ////printf("leftPageNum: %i, rightPageNum %i meta_phys_s %i\n", leftPageNum, rightPageNum, META_PHYS_S);
-    for(i = leftPageNum + 1; i <= rightPageNum && i < META_PHYS_S; i++)
+    printf("ON FREE THIS TIME, left frame index: %i, right frame index: %i\n", leftPageNum, rightPageNum);
+    for(i = leftPageNum + 1; i < rightPageNum && i < META_PHYS_S; i++)
     { 
-      //////printf("%i\n", i);
+      printf("%i\n", i);
       //unclaiming pages in physical memory if they are owned by current thread
       if(!frameMetaPhys[i].isFree && frameMetaPhys[i].owner == currentThread->tid)
       {
+        printf("Come on, man\n");
         frameMetaPhys[i].isFree = 1; 
         frameMetaPhys[i].owner = 0;
         frameMetaPhys[i].pageNum = 0;
         mprotect(&PHYS_MEMORY[(i * PAGE_SIZE) + MEM_SECTION], PAGE_SIZE, PROT_NONE);
+        printf("just protected, plz work \n");
       }
     }
     ////printf("Why did we just try to free frames?\n");
@@ -1237,7 +1263,6 @@ void setMem()
   //create blocks of size MEM_SECTION [MEM_SIZE/2]
   unsigned char freeBit = 0x80;
   int totalSize = (MEM_SECTION) - 3; //-3 because headers are 3 bytes
-  int pIndex = MEM_SECTION;
 
   //Allocation metadata: leftmost bit for free bit, 23 bits for allocation size
   //first the OS memory
@@ -1311,11 +1336,11 @@ void initializeSwapFile()
 
 /*Swaps frames out for one another, exact frames depend upon the context*/
 //newPos = place where it's being swapped into, oldPos = location where it was before; both relative to what we were previously searching for
-void swapMe(int isOnDisk, int newPos, int oldPos)
+void swapMe(int isOnFile, int newPos, int oldPos)
 {
   //Grabbing frame in PHYS_MEMORY
 
-  if (!isOnDisk)
+  if (!isOnFile)
   {
     mprotect(&PHYS_MEMORY[(newPos*PAGE_SIZE) + MEM_SECTION], PAGE_SIZE, PROT_READ | PROT_WRITE);
     mprotect(&PHYS_MEMORY[(oldPos*PAGE_SIZE) + MEM_SECTION], PAGE_SIZE, PROT_READ | PROT_WRITE);
@@ -1337,8 +1362,9 @@ void swapMe(int isOnDisk, int newPos, int oldPos)
   }
   else
   {
+    printf("Swapping on Swap File\toldPos: %d\tnewPos: %d\n",oldPos,newPos);
     mprotect(&PHYS_MEMORY[(newPos*PAGE_SIZE) + MEM_SECTION], PAGE_SIZE, PROT_READ | PROT_WRITE);
-    //swap out contents of physical memory with page found in disk
+    //swap out contents of physical memory with page found on file
     char buffer1[PAGE_SIZE];
     char buffer2[PAGE_SIZE];
     memcpy(buffer1,&PHYS_MEMORY[(newPos*PAGE_SIZE) + MEM_SECTION],PAGE_SIZE); //what's being swapped out
@@ -1364,7 +1390,7 @@ void* myallocate(size_t size_req, char *fileName, int line, char src)
 
   ////printf("Entering Malloc[%04x]\n",src);
 
-  //initialize memory and disk
+  //initialize memory and swap file
   if(!isSet)
   {
     ////printf("isSet called\n");
@@ -1373,7 +1399,7 @@ void* myallocate(size_t size_req, char *fileName, int line, char src)
 
   //////printf("Just set memory\n");
 
-  if(size_req <= 0 || size_req > (MEM_SECTION) - 3)//don't allow allocations of size 0; would cause internal fragmentation due to headers
+  if(size_req <= 0 || size_req > (MEM_SECTION - 3))//don't allow allocations of size 0; would cause internal fragmentation due to headers
   {
     notFinished = 0;
     //////printf("CRAP$$$\n");
@@ -1438,7 +1464,7 @@ void* myallocate(size_t size_req, char *fileName, int line, char src)
         PHYS_MEMORY[prev_index+1] = (size_req >> 8) & 0xff;
         PHYS_MEMORY[prev_index+2] = size_req & 0xff;
         pageFlag = EXTEND_PAGES;
-	printf("Allocating additional pages for thread...\n");
+	printf("[1] From [%d] Allocating request of %d additional pages for thread...\n",src,(int)size_req);
 	////printf("Next index: %d\n",start_index);
         PHYS_MEMORY[start_index] = 0x80 | ((sizeLeft >> 16) & 0x7f);
         PHYS_MEMORY[start_index+1] = (sizeLeft >> 8) & 0xff;
@@ -1453,8 +1479,8 @@ void* myallocate(size_t size_req, char *fileName, int line, char src)
         PHYS_MEMORY[prev_index+1] = (blockSize >> 8) & 0xff;
         PHYS_MEMORY[prev_index+2] = blockSize & 0xff;
         pageFlag = EXTEND_PAGES;
-	printf("Allocating additional pages for thread...\n");
-	PHYS_MEMORY[prev_index+(sizeof(unsigned char)*3)+blockSize] = '\0';//intended to raise SIGSEGV, even when we don't split
+	printf("[2] Allocating additional pages for thread...\n");
+	PHYS_MEMORY[prev_index+(sizeof(unsigned char)*3)+blockSize-1] = '\0';//intended to raise SIGSEGV, even when we don't split
         pageFlag = CLEAR_FLAG;
       }
       pageFlag = CLEAR_FLAG;//reset pageFlag
@@ -1492,9 +1518,9 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
     notFinished = 0;
     return;
   }
-
+  
   unsigned char *location  = (unsigned char*)ptr;
-
+  //printf("location %x\n", location);
   if(location < PHYS_MEMORY || location > &PHYS_MEMORY[MEM_SIZE - 1])
   {
     //address the user entered is not within physical memory
@@ -1511,16 +1537,16 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
   if(src == 0)//library
   {
     //printf("--->Library Free\n");
-    start_index = 0;
+    start_index = sizeof(char)*3;
     bound = MEM_SECTION;
 
     while(start_index < bound)
     {
+      meta = (PHYS_MEMORY[start_index-3] << 16) | (PHYS_MEMORY[start_index+1-3] << 8) | (PHYS_MEMORY[start_index+2-3]);
+      isFree = (meta >> 23) & 0x1;
+      blockSize = meta & 0x7fffff;
       if(&PHYS_MEMORY[start_index] == location)
       {
-        meta = (PHYS_MEMORY[start_index-3] << 16) | (PHYS_MEMORY[start_index-2] << 8) | (PHYS_MEMORY[start_index-1]);
-        isFree = (meta >> 23) & 0x1;
-        blockSize = meta & 0x7fffff;
 
         if(isFree)//block has already been freed
         {
@@ -1575,20 +1601,22 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
 
   else //user thread
   {
-    //printf("--->User Free\n");
-    start_index = MEM_SECTION;
+    printf("--->User Free\n");
+    start_index = MEM_SECTION +(sizeof(char)*3);
     bound = MEM_SIZE;
 
     while(start_index < bound)
     {
+      meta = (PHYS_MEMORY[start_index-3] << 16) | (PHYS_MEMORY[start_index+1-3] << 8) | (PHYS_MEMORY[start_index+2-3]);
+      isFree = (meta >> 23) & 0x1;
+      blockSize = meta & 0x7fffff;
+      //printf("In loop, location %x\n", &PHYS_MEMORY[start_index]);
+      //printf("Before If\n");
       if(&PHYS_MEMORY[start_index] == location)
       {
-	meta = (PHYS_MEMORY[start_index-3] << 16) | (PHYS_MEMORY[start_index+1-3] << 8) | (PHYS_MEMORY[start_index+2-3]);
-        isFree = (meta >> 23) & 0x1;
-        blockSize = meta & 0x7fffff;
-	////printf("currMeta: %d\n",blockSize);
+	printf("currMeta: %d\n",blockSize);
         leftoverBlock = &PHYS_MEMORY[start_index-3];
-        endAddr = &PHYS_MEMORY[start_index-3];
+        endAddr = &PHYS_MEMORY[start_index + blockSize];
         if(isFree)//block has already been freed
         {
 	  //////printf("Attempted Double Free\n");
@@ -1607,8 +1635,8 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
            
 	  if(nextFree)
 	  {
-            endAddr = &PHYS_MEMORY[start_index + blockSize];
 	    blockSize += nextSize + (sizeof(char) * 3);
+	    endAddr = &PHYS_MEMORY[start_index + blockSize];
 	    PHYS_MEMORY[start_index-3] = 0x80 | ((blockSize >> 16) & 0x7f);
             PHYS_MEMORY[start_index-2] = (blockSize >> 8) & 0xff;
             PHYS_MEMORY[start_index-1] = blockSize & 0xff;
@@ -1635,7 +1663,7 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
         startAddr = leftoverBlock;
         blockToFreeSize = blockSize;
         pageFlag = FREE_FRAMES;
-        ////printf("Just took out: \tblockToFreeSize: %d\n",blockToFreeSize);
+        printf("blockToFreeSize: %d\n",blockToFreeSize);
         raise(SIGSEGV);
         pageFlag = CLEAR_FLAG;
         break;
@@ -1652,7 +1680,7 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
   }
   notFinished = 0;
 }
-void printPhysicalMemory()
+/*void printPhysicalMemory()
 {
   unsigned int meta;
   char isFree;
@@ -1685,5 +1713,5 @@ void printCurrentThreadMemory()
     fflush(stdout);
     start_index += sizeof(char) * 3 + blockSize;
   }
-}
+}*/
 
