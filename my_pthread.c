@@ -31,10 +31,7 @@
 #define CONTEXT_SWITCH 2
 #define EXTEND_PAGES 3
 #define FREE_FRAMES 4
-<<<<<<< HEAD
-=======
 #define EXIT_ERROR 5
->>>>>>> why god why
 //-----------------------------
 
 
@@ -53,10 +50,7 @@ static frameMeta frameMetaSwap[META_SWAP_S];//metadata for swap file
 short pageFlag;//0 = no error, 1 = malloc-request, 2 free coalescing
 size_t request_size;//requested size from malloc
 unsigned char* startAddr;//on a malloc, address of a already allocated header, but we need to now actually make all its frame metas
-<<<<<<< HEAD
-=======
 unsigned char* endAddr;//for free only, used in conjuction with startAddr to decide how many pages to free
->>>>>>> why god why
 FILE* swapfile;//disk space to hold page frames
 int isSet;//flag to initialize memory, disk, and metadata
 int swapFileFD;//Swap file file descriptor
@@ -76,15 +70,6 @@ int notFinished;
 //L: Signal handler to reschedule upon VIRTUAL ALARM signal
 void scheduler(int signum)
 {
-<<<<<<< HEAD
-  printf("Checking Scheduler...\n");
-  if(notFinished)
-  {
-    printf("caught in the handler! Get back!\n");
-    return;
-  }
-
-=======
   //printf("In Scheduler~Current TID: %d\tStatus: %d\t PageFlag: %d\n",currentThread->tid,currentThread->status, pageFlag);
   if(notFinished)
   {
@@ -103,18 +88,13 @@ void scheduler(int signum)
     return;
   }
   //printf("I'm back!\n");
->>>>>>> why god why
   //Record remaining time
   getitimer(ITIMER_VIRTUAL, &currentTime);
 
 
   //AT THIS POINT THE CURRENT THREAD IS NOT IN THE SCHEDULER (running queue, but it's always in allthreads)
   //once the timer finishes, the value of it_value.tv_usec will reset to the interval time (note this was when we set it_interval only)
-<<<<<<< HEAD
-  //printf("\n[Thread %d] Signaled from %d, time left %i\n", currentThread->tid,currentThread->tid, (int)currentTime.it_value.tv_usec);
-=======
   //////printf("\n[Thread %d] Signaled from %d, time left %i\n", currentThread->tid,currentThread->tid, (int)currentTime.it_value.tv_usec);
->>>>>>> why god why
 
   //L: disable timer if still activehttps://www.google.com/search?q=complete+v
   timer.it_value.tv_sec = 0;
@@ -125,11 +105,7 @@ void scheduler(int signum)
 
   if(signum != SIGVTALRM)
   {
-<<<<<<< HEAD
-    //printf("[Thread %d] Signal Received: %d.\nExiting...\n", currentThread->tid, signum);
-=======
     //////printf("[Thread %d] Signal Received: %d.\nExiting...\n", currentThread->tid, signum);
->>>>>>> why god why
     exit(signum);
   }
 
@@ -139,11 +115,7 @@ void scheduler(int signum)
   //else the if body goes, and the actual amount of time that passed is added to timeelapsed
   int timeSpent = (int)currentTime.it_value.tv_usec;
   int expectedInterval = INTERVAL * (currentThread->priority + 1);
-<<<<<<< HEAD
-  //printf("timeSpent: %i, expectedInterval: %i\n", timeSpent, expectedInterval);
-=======
   //////printf("timeSpent: %i, expectedInterval: %i\n", timeSpent, expectedInterval);
->>>>>>> why god why
   if(timeSpent < 0 || timeSpent > expectedInterval)
   {
     timeSpent = 0;
@@ -155,13 +127,8 @@ void scheduler(int signum)
 
   
   timeElapsed += timeSpent;
-<<<<<<< HEAD
-  //printf("total time spend so far before maintenance cycle %i and the amount of time spent just now %i\n", timeElapsed, timeSpent);
-  //printf("[Thread %d] Total time: %d from time remaining: %d out of %d\n", currentThread->tid, timeElapsed, (int)currentTime.it_value.tv_usec, INTERVAL * (currentThread->priority + 1));
-=======
   //////printf("total time spend so far before maintenance cycle %i and the amount of time spent just now %i\n", timeElapsed, timeSpent);
   //////printf("[Thread %d] Total time: %d from time remaining: %d out of %d\n", currentThread->tid, timeElapsed, (int)currentTime.it_value.tv_usec, INTERVAL * (currentThread->priority + 1));
->>>>>>> why god why
 
   //L: check for maintenance cycle
   if(timeElapsed >= 10000000)
@@ -174,15 +141,6 @@ void scheduler(int signum)
   }
 
   prevThread = currentThread;
-<<<<<<< HEAD
-  
-  int i;
-  printf("right before switch case\n");
-  switch(currentThread->status)
-  {
-    case READY: //READY signifies that the current thread is in the running queue
-      printf("ready\n");
-=======
   //printf("prevThread: %d\n",prevThread->tid);
   
   int i;
@@ -191,7 +149,6 @@ void scheduler(int signum)
   {
     case READY: //READY signifies that the current thread is in the running queue
       //printf("READY\n");
->>>>>>> why god why
       if(currentThread->priority < MAX_SIZE - 1)
       {
 	currentThread->priority++;
@@ -223,11 +180,7 @@ void scheduler(int signum)
       break;
    
     case YIELD: //YIELD signifies pthread yield was called; don't update priority
-<<<<<<< HEAD
-      printf("yield\n");
-=======
       //printf("YIELD\n");
->>>>>>> why god why
       currentThread = NULL;
 
       for (i = 0; i < MAX_SIZE; i++) 
@@ -252,11 +205,7 @@ void scheduler(int signum)
       break;
 
     case WAIT:
-<<<<<<< HEAD
-      printf("wait\n");
-=======
       //printf("WAIT\n");
->>>>>>> why god why
       //L: When would something go to waiting queue?
       //A: In the case of blocking I/O, how do we detect this? Sockets
       //L: GG NOT OUR PROBLEM ANYMORE
@@ -265,11 +214,7 @@ void scheduler(int signum)
       break;
 
     case EXIT:
-<<<<<<< HEAD
-      printf("exit\n");
-=======
       //printf("EXIT\n");
->>>>>>> why god why
       currentThread = NULL;
 
       for (i = 0; i < MAX_SIZE; i++) 
@@ -284,11 +229,7 @@ void scheduler(int signum)
       if(currentThread == NULL)
       {
 	//L: what if other threads exist but none are in running queue?
-<<<<<<< HEAD
-	//printf("No other threads found. Exiting\n");
-=======
 	////printf("No other threads found. Exiting\n");
->>>>>>> why god why
 
 	//L: DO NOT USE EXIT() HERE. THAT IS A LEGIT TIME BOMB. ONLY USE RETURN
         return;
@@ -299,11 +240,7 @@ void scheduler(int signum)
       mydeallocate(prevThread, __FILE__, __LINE__, 0);
       currentThread->status = READY;
 
-<<<<<<< HEAD
-      //printf("Switching to: TID %d Priority %d\n", currentThread->tid, currentThread->priority);
-=======
       //////printf("Switching to: TID %d Priority %d\n", currentThread->tid, currentThread->priority);
->>>>>>> why god why
 
       //L: reset timer
       timer.it_value.tv_sec = 0;
@@ -313,17 +250,6 @@ void scheduler(int signum)
       int ret = setitimer(ITIMER_VIRTUAL, &timer, NULL);
       if (ret < 0)
       {
-<<<<<<< HEAD
-        //printf("Timer Reset Failed. Exiting...\n");
-        exit(0);
-      }
-      setcontext(currentThread->context);
-
-      break;
-
-    case JOIN: //JOIN corresponds with a call to pthread_join
-      printf("join\n");
-=======
         //////printf("Timer Reset Failed. Exiting...\n");
         exit(0);
       }
@@ -335,7 +261,6 @@ void scheduler(int signum)
 
     case JOIN: //JOIN corresponds with a call to pthread_join
       //printf("JOIN\n");
->>>>>>> why god why
       currentThread = NULL;
       //notice how we don't enqueue the thread that just finished back into the running queue
       //we just go straight to getting another thread
@@ -373,22 +298,14 @@ void scheduler(int signum)
       if(currentThread == NULL)
       {
         /*OH SHIT DEADLOCK*/
-<<<<<<< HEAD
-        //printf("DEADLOCK DETECTED\n");
-=======
         //////printf("DEADLOCK DETECTED\n");
->>>>>>> why god why
 	exit(EXIT_FAILURE);
       }
 
       break;
 
     default:
-<<<<<<< HEAD
-      //printf("Thread Status Error: %d\n", currentThread->status);
-=======
       //////printf("Thread Status Error: %d\n", currentThread->status);
->>>>>>> why god why
       exit(-1);
       break;
   }
@@ -406,23 +323,6 @@ void scheduler(int signum)
 
   if (ret < 0)
   {
-<<<<<<< HEAD
-     //printf("Timer Reset Failure. Exiting...\n");
-     exit(0);
-  }
-
-  //printf("Switching to: TID %d Priority %d\n", currentThread->tid, currentThread->priority);
-  //Switch to new context
-  if(prevThread->tid == currentThread->tid)  
-  {/*Assume switching to same context is bad. So don't do it.*/}
-  else
-  {
-    pageFlag = CONTEXT_SWITCH;
-    printf("about to raise sigsegv\n");
-    raise(SIGSEGV);
-    pageFlag = CLEAR_FLAG;
-    //reprotect memory
-=======
      //////printf("Timer Reset Failure. Exiting...\n");
      exit(0);
   }
@@ -442,7 +342,6 @@ void scheduler(int signum)
     raise(SIGSEGV);
     pageFlag = CLEAR_FLAG;
     
->>>>>>> why god why
     swapcontext(prevThread->context, currentThread->context);
   }
 
@@ -474,11 +373,7 @@ void maintenance()
 void garbage_collection()
 {
   //L: Block signal here
-<<<<<<< HEAD
-  
-=======
   //printf("entering garbage collection\n");
->>>>>>> why god why
   notFinished = 1;
   
   //if we havent called pthread create yet
@@ -492,14 +387,9 @@ void garbage_collection()
   int i;
   for(i = 0; i < META_PHYS_S; i++)
   {
-<<<<<<< HEAD
-    if(frameMetaPhys[i].owner == currentThread->tid)
-    {
-=======
     if(frameMetaPhys[i].owner == currentThread->tid && !frameMetaPhys[i].isFree)
     {
       //printf("Hi, I'm Thread#%d, you may remember me from such pages as %i\n",currentThread->tid,i);
->>>>>>> why god why
       bzero(&PHYS_MEMORY[(frameMetaPhys[i].pageNum * PAGE_SIZE) + MEM_SECTION], PAGE_SIZE);
       mprotect(&PHYS_MEMORY[(frameMetaPhys[i].pageNum * PAGE_SIZE) + MEM_SECTION], PAGE_SIZE, PROT_NONE);
 
@@ -547,12 +437,8 @@ void garbage_collection()
 
     allThreads[key] = temp;
   }
-<<<<<<< HEAD
-
-=======
   //printf("garbage collection finished haha yea right\n");
   pageFlag = CLEAR_FLAG;
->>>>>>> why god why
   notFinished = 0;
 
   raise(SIGVTALRM);
@@ -616,11 +502,7 @@ tcb* dequeue(list** q)
 
   
   if(tgt == NULL)
-<<<<<<< HEAD
-  {//printf("WE HAVE A PROBLEM IN DEQUEUE\n");
-=======
   {//////printf("WE HAVE A PROBLEM IN DEQUEUE\n");
->>>>>>> why god why
   }
 
   *q = queue;
@@ -633,19 +515,11 @@ void l_insert(list** q, tcb* jThread) //Non-circular Linked List
   list *queue = *q;
   if(queue == NULL)
   {
-<<<<<<< HEAD
-    //printf("if queue is null in l_insert\n");
-    //printPhysicalMemory();
-    queue = (list*)myallocate(sizeof(list),__FILE__, __LINE__, 0);
-    //printPhysicalMemory();
-    //printf("finished allocating for list\n");
-=======
     //////printf("if queue is null in l_insert\n");
     //printPhysicalMemory();
     queue = (list*)myallocate(sizeof(list),__FILE__, __LINE__, 0);
     //printPhysicalMemory();
     //////printf("finished allocating for list\n");
->>>>>>> why god why
     if(queue == NULL)
     {
       return;
@@ -655,11 +529,7 @@ void l_insert(list** q, tcb* jThread) //Non-circular Linked List
     *q = queue;
     return;
   }
-<<<<<<< HEAD
-  //printf("after checking if queue is null in l_insert2\n");
-=======
   //////printf("after checking if queue is null in l_insert2\n");
->>>>>>> why god why
   list *newNode = (list*)myallocate(sizeof(list), __FILE__, __LINE__, 0);
   if(newNode == NULL)
   {
@@ -725,15 +595,9 @@ void initializeMainContext()
   {
     return;
   }
-<<<<<<< HEAD
-  //printf("Getting Context\n");
-  getcontext(mText);
-  //printf("After get context\n");
-=======
   //////printf("Getting Context\n");
   getcontext(mText);
   //////printf("After get context\n");
->>>>>>> why god why
   mText->uc_link = &cleanup;
   mainThread->context = mText;
   mainThread->tid = 0;
@@ -751,11 +615,7 @@ void initializeMainContext()
 
 void initializeGarbageContext()
 {
-<<<<<<< HEAD
-
-=======
   //printf("initializing garbage collection\n");
->>>>>>> why god why
   memset(&sig,0,sizeof(mySig));
   sig.sa_handler = &scheduler;
   sigaction(SIGVTALRM, &sig,NULL);
@@ -775,29 +635,17 @@ void initializeGarbageContext()
 
   //L: set thread count
   threadCount = 1;
-<<<<<<< HEAD
-  printf("Garbage Finished~~\n");
-=======
   ////printf("Garbage Finished~~\n");
->>>>>>> why god why
 }
 
 /* create a new thread */
 int my_pthread_create(my_pthread_t * thread, pthread_attr_t * attr, void *(*function)(void*), void * arg)
 {
-<<<<<<< HEAD
-  printf("thread created\n");
-  int justRetrieved = 0;
-  if(!mainRetrieved)
-  {
-    printf("Garbage---\n");
-=======
   ////printf("thread created\n");
   int justRetrieved = 0;
   if(!mainRetrieved)
   {
     ////printf("Garbage---\n");
->>>>>>> why god why
     initializeGarbageContext();
     justRetrieved = 1;
   }
@@ -812,19 +660,11 @@ int my_pthread_create(my_pthread_t * thread, pthread_attr_t * attr, void *(*func
     return -1;
   }
   getcontext(task);
-<<<<<<< HEAD
-  //printf("finished getting context in pthread_create\n");
-  task->uc_link = &cleanup;
-  //printPhysicalMemory();
-  task->uc_stack.ss_sp = myallocate(STACK_S, __FILE__, __LINE__, 0);
-  //printf("finished allocating stack in pthread_create\n");
-=======
   //////printf("finished getting context in pthread_create\n");
   task->uc_link = &cleanup;
   //printPhysicalMemory();
   task->uc_stack.ss_sp = myallocate(STACK_S, __FILE__, __LINE__, 0);
   //////printf("finished allocating stack in pthread_create\n");
->>>>>>> why god why
   if(task->uc_stack.ss_sp == NULL)
   {
     return -1;
@@ -854,27 +694,16 @@ int my_pthread_create(my_pthread_t * thread, pthread_attr_t * attr, void *(*func
   l_insert(&allThreads[key], newThread);
 
   notFinished = 0;
-<<<<<<< HEAD
-
-=======
   ////printf("just finished the bulk of my_pthread_create\n");
->>>>>>> why god why
   //L: store main context
 
   if (justRetrieved)
   {
     //initializeMainContext();
-<<<<<<< HEAD
-    printf("Raise?\n");
-    raise(SIGVTALRM);
-  }
-  //printf("New thread created: TID %d\n", newThread->tid);
-=======
     //printf("Raise?\n");
     raise(SIGVTALRM);
   }
   //////printf("New thread created: TID %d\n", newThread->tid);
->>>>>>> why god why
   
   return 0;
 };
@@ -900,13 +729,8 @@ int my_pthread_yield()
 void my_pthread_exit(void *value_ptr)
 {
   notFinished = 1;
-<<<<<<< HEAD
-
-  //printf("In pthread_exit, mainRetrieved is %i\n", mainRetrieved);
-=======
   pageFlag = EXIT_ERROR;
   ////printf("In pthread_exit, mainRetrieved is %i\n", mainRetrieved);
->>>>>>> why god why
   if(!mainRetrieved)
   {
     initializeGarbageContext();
@@ -914,13 +738,8 @@ void my_pthread_exit(void *value_ptr)
   }
   //L: call garbage collection
   currentThread->jVal = value_ptr;
-<<<<<<< HEAD
-
-  setcontext(&cleanup);//notFinished is reset in garbage collection
-=======
   //printf("right before going to garbage collection\n");
   setcontext(&cleanup);//notFinished and pageFlag is reset in garbage collection
->>>>>>> why god why
 };
 
 /* wait for thread termination */
@@ -1122,22 +941,6 @@ void initializeQueues(list** runQ)
 
 static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
 {
-<<<<<<< HEAD
-  notFinished = 1;
-  unsigned char *src_page = (unsigned char *)si->si_addr;
-  //printf("si_addr is %p\n", si->si_addr);
-  int src_offset = src_page - &PHYS_MEMORY[MEM_SECTION];
-  int src_pageNum = (src_offset/PAGE_SIZE) + MEM_SECTION;//index in PHYS_MEMORY in page
-  //printf("We are in the memory manager src_offset: %i\n", src_offset);
-  if(pageFlag == CLEAR_FLAG) //thread/user or library/OS accessing invalid memory
-  {
-    //printf("->Segmentation Fault\n");
-    pthread_exit(NULL);
-  }
-  else if(pageFlag == CREATE_PAGE) //first time we call malloc for any thread, SHOULD ONLY CREATE ONE, THE FIRST MOTHA F'ING PAGE
-  {
-    //printf("Creating first page...\n");
-=======
   ////printf("entering memory manager\n");
   notFinished = 1;
   unsigned char *src_page = (unsigned char *)si->si_addr;
@@ -1159,21 +962,12 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
   else if(pageFlag == CREATE_PAGE) //first time we call malloc for any thread, SHOULD ONLY CREATE ONE, THE FIRST MOTHA F'ING PAGE
   {
     ////printf("Creating first page...\n");
->>>>>>> why god why
     //check if page we are on is not owned by any thread at all (may need to swap out)
     //requires creating new pages
     //look to see if there's enough room on physical and disk to fit new pages requested
     //insert frame metas either in physical or disk for the malloc request
     //check physical memory first
     //assuming for the first malloc in a thread
-<<<<<<< HEAD
-    if(frameMetaPhys[0].isFree)
-    {
-      //if this page isn't owned by any thread
-      frameMetaPhys[0].isFree = 0; 
-      frameMetaPhys[0].owner = currentThread->tid;
-      frameMetaPhys[0].pageNum = 0;
-=======
     //printCurrentThreadMemory();
     //printf("isFree: %04x\n",frameMetaPhys[0].isFree);
     fflush(stdout);
@@ -1190,17 +984,13 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
       frameMetaPhys[0].pageNum = 0;
       //printf("Three\n");
       fflush(stdout);
->>>>>>> why god why
       //swapMe(0,i,i); //swap the meta we just inserted into the right spot
     }
     else if(frameMetaPhys[0].owner != currentThread->tid)
     {
       //if this page is owned by another thread, need to swap it out after inserting page to somewhere in physical mem or swap file
       //first find open page in physical or swap file
-<<<<<<< HEAD
-=======
       //printf("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$is it here?\n");
->>>>>>> why god why
       int j;
       int foundInPhys = 0;
       int foundInDisk = 0;
@@ -1234,22 +1024,13 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
         }
         if(!foundInDisk)
         {
-<<<<<<< HEAD
-          //printf("Ran out of memory in both physical and disk\n");
-=======
           //////printf("Ran out of memory in both physical and disk\n");
->>>>>>> why god why
           startAddr = NULL;
           notFinished = 0;
           return;
         }
       }
     }
-<<<<<<< HEAD
-    printf("Address: %p\n",&PHYS_MEMORY[MEM_SECTION]);
-    mprotect(&PHYS_MEMORY[MEM_SECTION], PAGE_SIZE, PROT_READ | PROT_WRITE);
-    printf("Yo mama has babies again\n");
-=======
     //printf("################################################SUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUPPPPPPPPPP!\n");
     fflush(stdout);
     mprotect(&PHYS_MEMORY[MEM_SECTION], PAGE_SIZE, PROT_READ | PROT_WRITE);
@@ -1262,7 +1043,6 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
     //printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
     fflush(stdout);
     printCurrentThreadMemory();
->>>>>>> why god why
   }
   else if(pageFlag == EXTEND_PAGES) //a free block within a page owned by a thread in physical mem found [this is First Fit]
   {
@@ -1346,11 +1126,7 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
           }
           if(!foundInDisk)
           {
-<<<<<<< HEAD
-            //printf("Ran out of memory in both physical and disk\n");
-=======
             //////printf("Ran out of memory in both physical and disk\n");
->>>>>>> why god why
             startAddr = NULL;
 	    notFinished = 0;
             return;
@@ -1368,25 +1144,15 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
     {
       if(frameMetaPhys[i].owner == currentThread->tid && !frameMetaPhys[i].isFree)
       {
-<<<<<<< HEAD
-        if (i == frameMetaPhys[i].pageNum)
-        {
-	  printf("THis is a print statement\n");
-=======
         //printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@Does THIS work\n");
         if (i == frameMetaPhys[i].pageNum)
         {
 	  ////printf("THis is a print statement\n");
->>>>>>> why god why
           mprotect(&PHYS_MEMORY[MEM_SECTION + (i * PAGE_SIZE)], PAGE_SIZE, PROT_READ | PROT_WRITE);
 	}
 	else
 	{
-<<<<<<< HEAD
-	  printf("Swap\n");
-=======
 	  //printf("Swap\n");
->>>>>>> why god why
           swapMe(0,frameMetaPhys[i].pageNum,i);
 	}
       }
@@ -1396,11 +1162,7 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
     {
       if(frameMetaSwap[i].owner == currentThread->tid)
       {
-<<<<<<< HEAD
-	printf("Swap\n");
-=======
 	////printf("Swap\n");
->>>>>>> why god why
         swapMe(1,frameMetaPhys[i].pageNum,i);
       }
     }
@@ -1429,29 +1191,19 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
       leftPageNum = next_pageNum;
     }
     //have to calculate right page num
-<<<<<<< HEAD
-    unsigned char *end_addr = src_page + (sizeof(char) * 3) + blockToFreeSize;
-    int end_offset = end_addr - &PHYS_MEMORY[MEM_SECTION];
-=======
     //unsigned char *end_addr = src_page + (sizeof(char) * 3) + blockToFreeSize;
     int end_offset = endAddr - &PHYS_MEMORY[MEM_SECTION];
     ////printf("end_offset %i, src_offset %i\n", end_offset, src_offset);
->>>>>>> why god why
     rightPageNum = end_offset/PAGE_SIZE;
     if(rightPageNum % PAGE_SIZE == 0 && rightPageNum != 0)
     {
       rightPageNum--;
     }
     int i;
-<<<<<<< HEAD
-    for(i = leftPageNum + 1; i <= rightPageNum; i++)
-    {
-=======
     ////printf("leftPageNum: %i, rightPageNum %i meta_phys_s %i\n", leftPageNum, rightPageNum, META_PHYS_S);
     for(i = leftPageNum + 1; i <= rightPageNum && i < META_PHYS_S; i++)
     { 
       //////printf("%i\n", i);
->>>>>>> why god why
       //unclaiming pages in physical memory if they are owned by current thread
       if(!frameMetaPhys[i].isFree && frameMetaPhys[i].owner == currentThread->tid)
       {
@@ -1461,13 +1213,6 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
         mprotect(&PHYS_MEMORY[(i * PAGE_SIZE) + MEM_SECTION], PAGE_SIZE, PROT_NONE);
       }
     }
-<<<<<<< HEAD
-  }
-  printf("PHYS_MEMORY: %p\tMEM_SECTION: %d\n",(void*)PHYS_MEMORY,MEM_SECTION);
-  printf("daddy\n");
-  printf("??????\n");
-  notFinished = 0;
-=======
     ////printf("Why did we just try to free frames?\n");
   }
   //////printf("PHYS_MEMORY: %p\tMEM_SECTION: %d\n",(void*)PHYS_MEMORY,MEM_SECTION);
@@ -1475,7 +1220,6 @@ static void memory_manager(int signum, siginfo_t *si, void *ignoreMe)
 
   /*TODO: Do we need this?*/
   //notFinished = 0;
->>>>>>> why god why
 }
 
 void setMem()
@@ -1486,11 +1230,7 @@ void setMem()
   //posix_memalign((void**)&PHYS_MEMORY, PAGE_SIZE, MEM_SIZE);
   bzero(PHYS_MEMORY, MEM_SIZE);
 
-<<<<<<< HEAD
-  //printf("Memalign working?\n");
-=======
   //////printf("Memalign working?\n");
->>>>>>> why god why
 
 
   //set up two blocks of size 4 MB, first half is user memory, second half is OS/library memory
@@ -1504,18 +1244,11 @@ void setMem()
   PHYS_MEMORY[0] = freeBit | ((totalSize >> 16) & 0x7f);
   PHYS_MEMORY[1] = (totalSize >> 8) & 0xff;
   PHYS_MEMORY[2] = totalSize & 0xff;
-<<<<<<< HEAD
-  //second the user memory
-  PHYS_MEMORY[pIndex] = freeBit | ((totalSize >> 16) & 0x7f);
-  PHYS_MEMORY[pIndex+1] = (totalSize >> 8) & 0xff;
-  PHYS_MEMORY[pIndex+2] = totalSize & 0xff;    
-=======
   /*
   //second the user memory
   PHYS_MEMORY[pIndex] = freeBit | ((totalSize >> 16) & 0x7f);
   PHYS_MEMORY[pIndex+1] = (totalSize >> 8) & 0xff;
   PHYS_MEMORY[pIndex+2] = totalSize & 0xff; */   
->>>>>>> why god why
 
   //Initialize MetaPhys
   int i = 0;
@@ -1545,46 +1278,27 @@ void setMem()
   sa.sa_flags = SA_SIGINFO;
   sigemptyset(&sa.sa_mask);
   sa.sa_sigaction = memory_manager;
-<<<<<<< HEAD
-
-  if(sigaction(SIGSEGV, &sa, NULL) == -1)
-  {
-    //printf("Fatal error setting up signal handler\n");
-=======
   mprotect(&PHYS_MEMORY[MEM_SECTION], MEM_SECTION, PROT_NONE); 
   if(sigaction(SIGSEGV, &sa, NULL) == -1)
   {
     //////printf("Fatal error setting up signal handler\n");
->>>>>>> why god why
     exit(EXIT_FAILURE);    //explode!
   }
 
   if(!mainRetrieved)
   {
-<<<<<<< HEAD
-    //printf("-->Main Initializing...\n");
-    initializeMainContext();
-    //printf("Main Initialized-->\n");
-  }
-
-=======
     //////printf("-->Main Initializing...\n");
     initializeMainContext();
     //////printf("Main Initialized-->\n");
   }
   
->>>>>>> why god why
   
 }
 
 /*Creates the 16 MB Swap File*/
 void initializeSwapFile()
 {
-<<<<<<< HEAD
-  //printf("Swapper\n");
-=======
   //////printf("Swapper\n");
->>>>>>> why god why
   char *swapper = "swapFile";
   swapFileFD = open(swapper,O_CREAT | O_RDWR | O_TRUNC, S_IRUSR | S_IWUSR);
   lseek(swapFileFD,0,SEEK_SET);
@@ -1648,37 +1362,21 @@ void* myallocate(size_t size_req, char *fileName, int line, char src)
 {
   notFinished = 1;
 
-<<<<<<< HEAD
-  printf("Entering Malloc[%04x]\n",src);
-=======
   ////printf("Entering Malloc[%04x]\n",src);
->>>>>>> why god why
 
   //initialize memory and disk
   if(!isSet)
   {
-<<<<<<< HEAD
-    printf("isSet called\n");
-    setMem();
-  }
-
-  //printf("Just set memory\n");
-=======
     ////printf("isSet called\n");
     setMem();
   }
 
   //////printf("Just set memory\n");
->>>>>>> why god why
 
   if(size_req <= 0 || size_req > (MEM_SECTION) - 3)//don't allow allocations of size 0; would cause internal fragmentation due to headers
   {
     notFinished = 0;
-<<<<<<< HEAD
-    //printf("CRAP$$$\n");
-=======
     //////printf("CRAP$$$\n");
->>>>>>> why god why
     return NULL;
   }
 
@@ -1695,22 +1393,14 @@ void* myallocate(size_t size_req, char *fileName, int line, char src)
   {
     start_index = 0;
     bound = MEM_SECTION;
-<<<<<<< HEAD
-    //printf("LIBRARY\n");
-=======
     //printf("--->LIBRARY MALLOC\n");
->>>>>>> why god why
   }
   //if thread call
   else if(src == 1)
   {
     start_index = MEM_SECTION;
     bound = MEM_SIZE;
-<<<<<<< HEAD
-    printf("USER\n");
-=======
     //printf("--->USER MALLOC\n");
->>>>>>> why god why
     //printPhysicalMemory();
   }
   //reeaaally shouldn't ever happen but just in case
@@ -1721,17 +1411,6 @@ void* myallocate(size_t size_req, char *fileName, int line, char src)
    
   while(start_index < bound)
   {
-<<<<<<< HEAD
-    printf("Iterating in malloc main loop, start_index is %i\n", start_index);
-    //extract free bit & block size from header
-    pageFlag = CREATE_PAGE;
-    //printf("Before Meta\n");
-    meta = (PHYS_MEMORY[start_index] << 16) | (PHYS_MEMORY[start_index+1] << 8) | (PHYS_MEMORY[start_index+2]); //if we encounter this spot in memory where there's no page, we'll go to handler to create that new page
-    //printf("After Meta\n");
-    pageFlag = CLEAR_FLAG;
-    isFree = (meta >> 23) & 0x1;
-    blockSize = meta & 0x7fffff;
-=======
     //////printf("Iterating in malloc main loop, start_index is %i\n", start_index);
     //extract free bit & block size from header
     pageFlag = CREATE_PAGE;
@@ -1741,18 +1420,13 @@ void* myallocate(size_t size_req, char *fileName, int line, char src)
     isFree = (meta >> 23) & 0x1;
     blockSize = meta & 0x7fffff;
     ////printf("current blockSize: %d\n",blockSize);
->>>>>>> why god why
     //valid block found
     if(isFree && blockSize >= size_req)
     {      
       int prev_index = start_index; //in the case that we dont split, we need to increase the blockSize
       //fill in metadata for allocated block
       startAddr = &PHYS_MEMORY[start_index];
-<<<<<<< HEAD
-      start_index += (size_req + 3);//jump to next block to place new header
-=======
       start_index += size_req + 3;//jump to next block to place new header
->>>>>>> why god why
       
       // fill in metadata for new free block
       int sizeLeft = blockSize - size_req - 3;
@@ -1764,11 +1438,8 @@ void* myallocate(size_t size_req, char *fileName, int line, char src)
         PHYS_MEMORY[prev_index+1] = (size_req >> 8) & 0xff;
         PHYS_MEMORY[prev_index+2] = size_req & 0xff;
         pageFlag = EXTEND_PAGES;
-<<<<<<< HEAD
-=======
 	printf("Allocating additional pages for thread...\n");
 	////printf("Next index: %d\n",start_index);
->>>>>>> why god why
         PHYS_MEMORY[start_index] = 0x80 | ((sizeLeft >> 16) & 0x7f);
         PHYS_MEMORY[start_index+1] = (sizeLeft >> 8) & 0xff;
         PHYS_MEMORY[start_index+2] = sizeLeft & 0xff;
@@ -1782,22 +1453,15 @@ void* myallocate(size_t size_req, char *fileName, int line, char src)
         PHYS_MEMORY[prev_index+1] = (blockSize >> 8) & 0xff;
         PHYS_MEMORY[prev_index+2] = blockSize & 0xff;
         pageFlag = EXTEND_PAGES;
-<<<<<<< HEAD
-=======
 	printf("Allocating additional pages for thread...\n");
->>>>>>> why god why
 	PHYS_MEMORY[prev_index+(sizeof(unsigned char)*3)+blockSize] = '\0';//intended to raise SIGSEGV, even when we don't split
         pageFlag = CLEAR_FLAG;
       }
       pageFlag = CLEAR_FLAG;//reset pageFlag
       notFinished = 0;
-<<<<<<< HEAD
-      printf("Malloc returned an address %li\n", (startAddr + (sizeof(char)*3))-PHYS_MEMORY);
-=======
       ////printf("Malloc returned an address %li\n", (startAddr + (sizeof(char)*3))-PHYS_MEMORY);
       //printPhysicalMemory();
       //printf("----------------------------------------------\n");
->>>>>>> why god why
       return startAddr + (sizeof(char) * 3);
     }
     else
@@ -1811,13 +1475,9 @@ void* myallocate(size_t size_req, char *fileName, int line, char src)
   pageFlag = CLEAR_FLAG;//reset pageFlag
 
   notFinished = 0;
-<<<<<<< HEAD
-  printf("Malloc returned null\n");
-=======
   //printf("Malloc returned null\n");
   //printPhysicalMemory();
   //printf("----------------------------------------------\n");
->>>>>>> why god why
   return NULL;
 }
 
@@ -1838,11 +1498,7 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
   if(location < PHYS_MEMORY || location > &PHYS_MEMORY[MEM_SIZE - 1])
   {
     //address the user entered is not within physical memory
-<<<<<<< HEAD
-    printf("about raising sigsegv\n");
-=======
     ////printf("about raising sigsegv\n");
->>>>>>> why god why
     raise(SIGSEGV);
   }
   int start_index;
@@ -1854,10 +1510,7 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
   unsigned char *leftoverBlock;
   if(src == 0)//library
   {
-<<<<<<< HEAD
-=======
     //printf("--->Library Free\n");
->>>>>>> why god why
     start_index = 0;
     bound = MEM_SECTION;
 
@@ -1865,28 +1518,12 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
     {
       if(&PHYS_MEMORY[start_index] == location)
       {
-<<<<<<< HEAD
-        meta = (PHYS_MEMORY[start_index] << 16) | (PHYS_MEMORY[start_index+1] << 8) | (PHYS_MEMORY[start_index+2]);
-=======
         meta = (PHYS_MEMORY[start_index-3] << 16) | (PHYS_MEMORY[start_index-2] << 8) | (PHYS_MEMORY[start_index-1]);
->>>>>>> why god why
         isFree = (meta >> 23) & 0x1;
         blockSize = meta & 0x7fffff;
 
         if(isFree)//block has already been freed
         {
-<<<<<<< HEAD
-	  //printf("Attempted Double Free\n");
-	  pthread_exit(NULL);
-        }
-
-        PHYS_MEMORY[start_index] = 0x80;//reset free bit
-
-        //coalesce with next block
-        if(PHYS_MEMORY[start_index] + blockSize + 3 < MEM_SIZE)
-        {
-  	  nextMeta = (PHYS_MEMORY[start_index + blockSize + 3] << 16) | (PHYS_MEMORY[start_index + blockSize + 4] << 8) | (PHYS_MEMORY[start_index + blockSize + 5]);
-=======
 	  //////printf("Attempted Double Free\n");
 	  pthread_exit(NULL);
         }
@@ -1897,47 +1534,30 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
         if(start_index + blockSize < MEM_SIZE)
         {
   	  nextMeta = (PHYS_MEMORY[start_index + blockSize] << 16) | (PHYS_MEMORY[start_index + blockSize + 1] << 8) | (PHYS_MEMORY[start_index + blockSize + 2]);
->>>>>>> why god why
           nextFree = (nextMeta >> 23) & 0x1;
           nextSize = nextMeta & 0x7fffff;
 
 	  if(nextFree)
 	  {
 	    blockSize += nextSize + (sizeof(char) * 3);
-<<<<<<< HEAD
-	    PHYS_MEMORY[start_index] = 0x80 | ((blockSize >> 16) & 0x7f);
-            PHYS_MEMORY[start_index+1] = (blockSize >> 8) & 0xff;
-            PHYS_MEMORY[start_index+2] = blockSize & 0xff;
-=======
 	    PHYS_MEMORY[start_index-3] = 0x80 | ((blockSize >> 16) & 0x7f);
             PHYS_MEMORY[start_index-2] = (blockSize >> 8) & 0xff;
             PHYS_MEMORY[start_index-1] = blockSize & 0xff;
->>>>>>> why god why
 	  }
 
           //coalesce with prev block
           if(prevBlock != -1)
           {
-<<<<<<< HEAD
-	    prevMeta = (PHYS_MEMORY[prevBlock] << 16) | (PHYS_MEMORY[prevBlock+1] << 8) | (PHYS_MEMORY[prevBlock+2]);
-=======
 	    prevMeta = (PHYS_MEMORY[prevBlock-3] << 16) | (PHYS_MEMORY[prevBlock-2] << 8) | (PHYS_MEMORY[prevBlock-1]);
->>>>>>> why god why
             prevFree = (prevMeta >> 23) & 0x1;
             prevSize = prevMeta & 0x7fffff;
 
 	    if(prevFree)
 	    {
 	      blockSize += prevSize + (sizeof(char)*3);
-<<<<<<< HEAD
-              PHYS_MEMORY[prevBlock] = 0x80 | ((blockSize >> 16) & 0x7f);
-              PHYS_MEMORY[prevBlock+1] = (blockSize >> 8) & 0xff;
-              PHYS_MEMORY[prevBlock+2] = blockSize & 0xff;
-=======
               PHYS_MEMORY[prevBlock-3] = 0x80 | ((blockSize >> 16) & 0x7f);
               PHYS_MEMORY[prevBlock-2] = (blockSize >> 8) & 0xff;
               PHYS_MEMORY[prevBlock-1] = blockSize & 0xff;
->>>>>>> why god why
 	    }
 
           }
@@ -1955,10 +1575,7 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
 
   else //user thread
   {
-<<<<<<< HEAD
-=======
     //printf("--->User Free\n");
->>>>>>> why god why
     start_index = MEM_SECTION;
     bound = MEM_SIZE;
 
@@ -1966,33 +1583,6 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
     {
       if(&PHYS_MEMORY[start_index] == location)
       {
-<<<<<<< HEAD
-        meta = (PHYS_MEMORY[start_index] << 16) | (PHYS_MEMORY[start_index+1] << 8) | (PHYS_MEMORY[start_index+2]);
-        isFree = (meta >> 23) & 0x1;
-        blockSize = meta & 0x7fffff;
-        leftoverBlock = &PHYS_MEMORY[start_index];
-        if(isFree)//block has already been freed
-        {
-	  //printf("Attempted Double Free\n");
-	  pthread_exit(NULL);
-        }
-
-        PHYS_MEMORY[start_index] = 0x80;//reset free bit
-
-        //coalesce with next block
-        if(PHYS_MEMORY[start_index] + blockSize + 3 < MEM_SIZE)
-        {
-  	  nextMeta = (PHYS_MEMORY[start_index + blockSize + 3] << 16) | (PHYS_MEMORY[start_index + blockSize + 4] << 8) | (PHYS_MEMORY[start_index + blockSize + 5]);
-          nextFree = (nextMeta >> 23) & 0x1;
-          nextSize = nextMeta & 0x7fffff;
-
-	  if(nextFree)
-	  {
-	    blockSize += nextSize + (sizeof(char) * 3);
-	    PHYS_MEMORY[start_index] = 0x80 | ((blockSize >> 16) & 0x7f);
-            PHYS_MEMORY[start_index+1] = (blockSize >> 8) & 0xff;
-            PHYS_MEMORY[start_index+2] = blockSize & 0xff;
-=======
 	meta = (PHYS_MEMORY[start_index-3] << 16) | (PHYS_MEMORY[start_index+1-3] << 8) | (PHYS_MEMORY[start_index+2-3]);
         isFree = (meta >> 23) & 0x1;
         blockSize = meta & 0x7fffff;
@@ -2022,34 +1612,22 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
 	    PHYS_MEMORY[start_index-3] = 0x80 | ((blockSize >> 16) & 0x7f);
             PHYS_MEMORY[start_index-2] = (blockSize >> 8) & 0xff;
             PHYS_MEMORY[start_index-1] = blockSize & 0xff;
->>>>>>> why god why
 	  }
 
           //coalesce with prev block
           if(prevBlock != -1)
           {
-<<<<<<< HEAD
-	    prevMeta = (PHYS_MEMORY[prevBlock] << 16) | (PHYS_MEMORY[prevBlock+1] << 8) | (PHYS_MEMORY[prevBlock+2]);
-=======
 	    prevMeta = (PHYS_MEMORY[prevBlock-3] << 16) | (PHYS_MEMORY[prevBlock-2] << 8) | (PHYS_MEMORY[prevBlock-1]);
->>>>>>> why god why
             prevFree = (prevMeta >> 23) & 0x1;
             prevSize = prevMeta & 0x7fffff;
 
 	    if(prevFree)
 	    {
 	      blockSize += prevSize + (sizeof(char)*3);
-<<<<<<< HEAD
-              PHYS_MEMORY[prevBlock] = 0x80 | ((blockSize >> 16) & 0x7f);
-              PHYS_MEMORY[prevBlock+1] = (blockSize >> 8) & 0xff;
-              PHYS_MEMORY[prevBlock+2] = blockSize & 0xff;
-              leftoverBlock = &PHYS_MEMORY[prevBlock];
-=======
               PHYS_MEMORY[prevBlock-3] = 0x80 | ((blockSize >> 16) & 0x7f);
               PHYS_MEMORY[prevBlock-2] = (blockSize >> 8) & 0xff;
               PHYS_MEMORY[prevBlock-1] = blockSize & 0xff;
               leftoverBlock = &PHYS_MEMORY[prevBlock-3];
->>>>>>> why god why
 	    }
 
           }
@@ -2057,21 +1635,14 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
         startAddr = leftoverBlock;
         blockToFreeSize = blockSize;
         pageFlag = FREE_FRAMES;
-<<<<<<< HEAD
-        printf("about to raise sigsegv\n");
-=======
         ////printf("Just took out: \tblockToFreeSize: %d\n",blockToFreeSize);
->>>>>>> why god why
         raise(SIGSEGV);
         pageFlag = CLEAR_FLAG;
         break;
       }
       else
       {
-<<<<<<< HEAD
-=======
 	////printf("Skipping %d\n",blockSize);
->>>>>>> why god why
         prevBlock = start_index;
         start_index += blockSize + (sizeof(char) * 3);
       }
@@ -2083,35 +1654,21 @@ void mydeallocate(void *ptr, char *fileName, int line, char src)
 }
 void printPhysicalMemory()
 {
-<<<<<<< HEAD
-
-=======
->>>>>>> why god why
   unsigned int meta;
   char isFree;
   int blockSize;
   int start_index = 0;
-<<<<<<< HEAD
-  int end_index = MEM_SIZE;
-=======
   int end_index = MEM_SECTION;
->>>>>>> why god why
   while(start_index < end_index){
     meta = (PHYS_MEMORY[start_index] << 16) | (PHYS_MEMORY[start_index+1] << 8) | (PHYS_MEMORY[start_index+2]);
     isFree = (meta >> 23) & 0x1;
     blockSize = meta & 0x7fffff;
-<<<<<<< HEAD
-    printf("We are on start_index %i which has a block of size %i and it is free? %i\n", start_index, blockSize, isFree);
-=======
     //printf("We are on start_index %i which has a block of size %i and it is free? %i\n", start_index, blockSize, isFree);
->>>>>>> why god why
     fflush(stdout);
     start_index += sizeof(char) * 3 + blockSize;
   }
 
 }
-<<<<<<< HEAD
-=======
 void printCurrentThreadMemory()
 {
   unsigned int meta;
@@ -2130,4 +1687,3 @@ void printCurrentThreadMemory()
   }
 }
 
->>>>>>> why god why

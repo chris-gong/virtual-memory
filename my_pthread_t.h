@@ -151,10 +151,7 @@ void initializeSwapFile();
 void swapMe(int, int, int);
 void setMem();
 void printPhysicalMemory();
-<<<<<<< HEAD
-=======
 void printCurrentThreadMemory();
->>>>>>> why god why
 
 //struct to hold: leftmost:freebit, pageNum, and Thread ID
 typedef struct frameMeta
@@ -164,7 +161,4 @@ typedef struct frameMeta
   unsigned int pageNum;
 }frameMeta;
 #endif
-<<<<<<< HEAD
-=======
 
->>>>>>> why god why
