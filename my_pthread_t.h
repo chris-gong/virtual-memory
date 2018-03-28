@@ -139,6 +139,8 @@ void initializeMainContext();
 
 void initializeGarbageContext();
 
+void printAllThreads();
+
 /*
 	MEMORY MANAGER
 ==========================================================================================
@@ -149,10 +151,14 @@ void* myallocate(size_t, char*, int, char);
 void mydeallocate(void*, char*, int, char);
 void initializeSwapFile();
 void swapMe(int, int, int);
+void byteByByte(int, int,int);
 void setMem();
+void* shalloc(size_t);
 void printPhysicalMemory();
 void printCurrentThreadMemory();
 void printFrameMetaPhys();
+void printRunningQueue();
+
 
 //struct to hold: leftmost:freebit, pageNum, and Thread ID
 typedef struct frameMeta
@@ -162,4 +168,5 @@ typedef struct frameMeta
   unsigned int pageNum;
 }frameMeta;
 #endif
+
 
