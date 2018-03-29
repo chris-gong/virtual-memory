@@ -163,10 +163,11 @@ void printRunningQueue();
 //struct to hold: leftmost:freebit, pageNum, and Thread ID
 typedef struct frameMeta
 {
-  char isFree;//if frame is available for use
+  unsigned char isFree;//if frame is available for use
   unsigned int owner;//thread ID
   unsigned int pageNum;
 }frameMeta;
 #endif
+
 
 
