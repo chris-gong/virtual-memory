@@ -497,9 +497,9 @@ void garbage_collection()
     {
       if(allThreads[key]->next->thread->tid == currentThread->tid)
       {
-	list *removal = allThreads[key]->next;
-	allThreads[key]->next = removal->next;
-	mydeallocate(removal, __FILE__, __LINE__, 0);
+	      list *removal = allThreads[key]->next;
+	      allThreads[key]->next = removal->next;
+	      mydeallocate(removal, __FILE__, __LINE__, 0);
         break;
       }
       allThreads[key] = allThreads[key]->next;
@@ -692,7 +692,6 @@ void initializeMainContext()
   mainThread->jVal = NULL;
   mainThread->retVal = NULL;
   mainThread->status = READY;
-  
   mainRetrieved = 1;
   l_insert(&allThreads[0], mainThread);
 
@@ -771,6 +770,15 @@ int my_pthread_create(my_pthread_t * thread, pthread_attr_t * attr, void *(*func
   newThread->jVal = NULL;
   newThread->retVal = NULL;
   newThread->status = READY;
+
+  //memory manager initializations
+  newThread->myPage = (myPage*)myallocate((sizeof(myPage), __FILE__, __LINE__, NULL);
+  newThread->myPage->alloc = 0;
+  newThread->myPage->offset = 0;
+  newThread->myPage->pageTable = NULL;
+  newThread->myPage->nextPage = NULL;
+  newThread->myPage->prevPage = NULL;
+
 
   *thread = threadCount;
   threadCount++;
